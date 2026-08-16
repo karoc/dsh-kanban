@@ -44,6 +44,7 @@
     "prepare": "tsdown --config ./tsdown.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsc --noEmit && node --test scripts/board-core.spec.mjs && node scripts/verify-tools.mjs && node scripts/verify-spec.mjs",
+    "check:spec": "node scripts/check-note-spec.mjs",
     "verify": "node scripts/verify-tools.mjs",
     "accept": "node scripts/accept-gui.mjs",
     "release:check": "node scripts/release-check.mjs",

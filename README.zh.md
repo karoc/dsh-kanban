@@ -59,6 +59,14 @@
 
 > 为何不能直接 import dsh：`verify-agent-note-format.ts` 是 dsh 仓库内脚本，不发布、不可安装、外部插件无法引用；规范只能以常量形式固化，靠"输入框覆盖 + 版本升级"同步。
 
+#### 同步机制（开发期检查 + 发版）
+
+- **来源锚定**：`src/note-spec.ts` 顶部注明复刻自 deepseek-harness（上游 commit `47f943859bef60e4160492346772ded9b24f765a`）；
+- **开发期检查**：`pnpm check:spec`（`scripts/check-note-spec.mjs`）读取本机 dsh 源码的规范常量（`agent-note-tree.ts` 的分类、`verify-agent-note-format.ts` 的格式、`AGENTS.md` 的非平凡规则），与插件默认逐项对比——上游一改，跑一次就报差异，提示更新 `src/note-spec.ts` 并 bump `NOTE_SPEC_VERSION`；
+- **发版同步**：作者更新默认常量后发布新版本；用户 `dsh plugin update dsh-kanban` 拿到新默认（若用户自行覆盖过，页面会按"更新警告"提示覆盖会被重置）。
+
+`check:spec` 依赖本机 dsh 源码路径，是**开发期工具**（不随发布分发、不进用户 `test`）。
+
 ### `/kanban` 命令
 
 `/kanban` 查看当前工作区看板；`/kanban done <card-id>` 快速把一张卡片标记为完成。

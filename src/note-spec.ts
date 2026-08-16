@@ -7,6 +7,10 @@
  *   - note classes:     scripts/agent-note-tree.ts  -> AGENT_NOTE_CLASSES
  *   - note format:      scripts/verify-agent-note-format.ts  (headers + sections)
  *   - non-trivial rule: AGENTS.md  ("Non-trivial changes MUST include an Agent Note…")
+ *   - checked at commit: 47f943859bef60e4160492346772ded9b24f765a
+ *   Run `pnpm check:spec` (scripts/check-note-spec.mjs) to diff these defaults
+ *   against a local dsh checkout and catch upstream changes; bump
+ *   NOTE_SPEC_VERSION when a default below changes.
  *
  * A workspace may override any of these via `.agents/notes/overrides.json`.
  * `specVersion` records the plugin's default spec revision; when the plugin

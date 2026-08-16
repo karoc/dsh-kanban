@@ -76,6 +76,23 @@ The board is scoped to the **current session's working directory (cwd)**: every 
 > plugin. The spec is fixed as constants and synced via "input-box overrides +
 > plugin releases".
 
+#### Sync mechanism (dev-time check + releases)
+
+- **Source anchor**: `src/note-spec.ts` states it is replicated from
+  deepseek-harness (upstream commit `47f943859bef60e4160492346772ded9b24f765a`);
+- **Dev-time check**: `pnpm check:spec` (`scripts/check-note-spec.mjs`) reads the
+  local dsh checkout's spec constants (classes from `agent-note-tree.ts`, format
+  from `verify-agent-note-format.ts`, non-trivial rule from `AGENTS.md`) and
+  diffs them against the plugin defaults — when upstream changes, one run reports
+  the difference and tells you to update `src/note-spec.ts` and bump
+  `NOTE_SPEC_VERSION`;
+- **Release sync**: the author updates the defaults and ships a new version;
+  `dsh plugin update dsh-kanban` delivers the new defaults (if the user had
+  custom overrides, the update warning explains they get reset).
+
+`check:spec` needs the local dsh source path — it is a **dev-time tool** (not
+shipped, not part of the user-facing `test` chain).
+
 ### `/kanban` command
 
 `/kanban` shows the current workspace board; `/kanban done <card-id>` marks a card done quickly.
