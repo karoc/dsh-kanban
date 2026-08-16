@@ -94,7 +94,8 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-kanban: copy dictionaries')
 
   const api = createBoardApi()
-  const t = ctx.locale.bind(NS) as (key: BoardKey) => string
+  // Translate supports (key, params?) — aligned with ui-slots' Translate type.
+  const t = ctx.locale.bind(NS) as (key: BoardKey, params?: Record<string, unknown>) => string
 
   // Sidebar footer action: the "看板" entry that opens the page.
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({

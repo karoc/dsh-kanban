@@ -24,7 +24,7 @@ export interface BoardOverlayInjected {
   api: BoardApi
   workspace: BoardWorkspace | undefined
   onClose: () => void
-  t: (key: BoardKey) => string
+  t: (key: BoardKey, params?: Record<string, unknown>) => string
 }
 
 /** Overlay wrapper: renders the board page only while open. */
