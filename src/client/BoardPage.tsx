@@ -3,11 +3,24 @@
  *
  * Reads the workspace's KANBAN.json through the host webServer route
  * (GET/POST /kanban/api) and renders three columns (todo / in_progress / done)
- * with per-card status moves, delete, and an add composer. Pure presentation:
- * every read/write flows through the injected api callbacks.
+ * with per-card status moves, delete, and an add composer. Interactive controls
+ * use @deepseek-ai/dsh-client-ui-primitives (Button, Input, Menu, Pill, icons)
+ * so the page matches the native DSH look; only layout lives in the plugin's
+ * own token-based styles.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Button,
+  IconCheckOutline16,
+  IconCloseOutline16,
+  IconPlusOutline16,
+  IconRefreshOutline16,
+  IconTrashOutline16,
+  Input,
+  Menu,
+  Pill,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { BoardKey } from './locales.ts'
 
 /** One card as served by the host route. */
@@ -73,6 +86,13 @@ function sortCards(cards: readonly BoardCardView[]): BoardCardView[] {
     if (d !== 0) return d
     return right.createdAt - left.createdAt
   })
+}
+
+/** Status label for a board status (locale-aware). */
+function statusLabel(status: BoardCardView['status'], t: BoardPageProps['t']): string {
+  if (status === 'todo') return t('statusTodo')
+  if (status === 'in_progress') return t('statusInProgress')
+  return t('statusDone')
 }
 
 /** The board page component (rendered inside the shell.overlay seat). */
@@ -169,40 +189,17 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
                   <section key={status} className="kb-column" data-status={status}>
                     <div className="kb-column-head">
                       <span className={`kb-dot kb-dot-${status}`} />
-                      <h3 className="kb-column-title">{t(status === 'todo' ? 'statusTodo' : status === 'in_progress' ? 'statusInProgress' : 'statusDone')}</h3>
+                      <h3 className="kb-column-title">{statusLabel(status, t)}</h3>
                       <span className="kb-column-count">{t('counts', { n: String(grouped[status].length) })}</span>
                     </div>
                     {grouped[status].map(card => (
-                      <article key={card.id} className="kb-card" data-card-id={card.id}>
-                        <h4 className="kb-card-title">{card.title}</h4>
-                        {card.description !== undefined && <p className="kb-card-desc">{card.description}</p>}
-                        {card.tags.length > 0 && (
-                          <div className="kb-card-meta">
-                            {card.tags.map(tag => <span key={tag} className="kb-tag">#{tag}</span>)}
-                          </div>
-                        )}
-                        <div className="kb-card-actions">
-                          <select
-                            className="kb-status-select"
-                            aria-label={t('statusTooltip')}
-                            value={card.status}
-                            onChange={event => moveCard(card.id, event.target.value as BoardCardView['status'])}
-                          >
-                            {STATUSES.map(option => (
-                              <option key={option} value={option}>
-                                {t(option === 'todo' ? 'statusTodo' : option === 'in_progress' ? 'statusInProgress' : 'statusDone')}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="kb-mini-btn kb-mini-btn-danger"
-                            onClick={() => removeCard(card.id)}
-                          >
-                            {t('remove')}
-                          </button>
-                        </div>
-                      </article>
+                      <Card
+                        key={card.id}
+                        card={card}
+                        t={t}
+                        onMove={moveCard}
+                        onRemove={removeCard}
+                      />
                     ))}
                   </section>
                 ))}
@@ -210,19 +207,25 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
               {cards.length === 0 && <p className="kb-empty">{t('empty')}</p>}
               <div className="kb-composer">
                 <div className="kb-composer-row">
-                  <input
-                    className="kb-input"
+                  <Input
+                    className="kb-composer-field"
                     value={draftTitle}
                     placeholder={t('addPlaceholder')}
                     onChange={event => setDraftTitle(event.target.value)}
                     onKeyDown={event => { if (event.key === 'Enter') addCard() }}
                   />
-                  <button type="button" className="kb-primary-btn" disabled={draftTitle.trim() === ''} onClick={addCard}>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    icon={<IconPlusOutline16 />}
+                    disabled={draftTitle.trim() === ''}
+                    onClick={addCard}
+                  >
                     {t('add')}
-                  </button>
+                  </Button>
                 </div>
-                <input
-                  className="kb-input"
+                <Input
+                  className="kb-composer-field"
                   value={draftDescription}
                   placeholder={t('addDescriptionPlaceholder')}
                   onChange={event => setDraftDescription(event.target.value)}
@@ -236,7 +239,62 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
   )
 }
 
-/** Shared header strip of the overlay. */
+/** One card row: title, optional description, tags, and a status Menu + delete. */
+function Card(props: {
+  card: BoardCardView
+  t: BoardPageProps['t']
+  onMove: (id: string, status: BoardCardView['status']) => void
+  onRemove: (id: string) => void
+}) {
+  const { card, t, onMove, onRemove } = props
+  const [statusOpen, setStatusOpen] = useState(false)
+  const statusItems = STATUSES.map(status => ({
+    id: status,
+    label: statusLabel(status, t),
+    ...status === card.status ? { icon: <IconCheckOutline16 /> } : {},
+  }))
+  return (
+    <article className="kb-card" data-card-id={card.id}>
+      <h4 className="kb-card-title">{card.title}</h4>
+      {card.description !== undefined && <p className="kb-card-desc">{card.description}</p>}
+      {card.tags.length > 0 && (
+        <div className="kb-card-meta">
+          {card.tags.map(tag => <Pill key={tag} active>{tag}</Pill>)}
+        </div>
+      )}
+      <div className="kb-card-actions">
+        <Menu
+          open={statusOpen}
+          onClose={() => { setStatusOpen(false) }}
+          items={statusItems}
+          selectedId={card.status}
+          onSelect={(id) => { onMove(card.id, id as BoardCardView['status']); setStatusOpen(false) }}
+          align="start"
+          anchor={(
+            <Button
+              variant="outline"
+              size="sm"
+              aria-haspopup="menu"
+              aria-expanded={statusOpen}
+              onClick={() => { setStatusOpen(v => !v) }}
+            >
+              {statusLabel(card.status, t)}
+            </Button>
+          )}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<IconTrashOutline16 />}
+          aria-label={t('remove')}
+          onClick={() => onRemove(card.id)}
+        />
+      </div>
+    </article>
+  )
+}
+
+/** Shared header strip of the overlay (native DSH ghost buttons). */
 function BoardHeader(props: {
   onClose: () => void
   t: (key: BoardKey) => string
@@ -251,9 +309,13 @@ function BoardHeader(props: {
       </div>
       <div className="kb-header-spacer" />
       {props.onRefresh !== undefined && (
-        <button type="button" className="kb-icon-btn" onClick={props.onRefresh}>{props.t('refresh')}</button>
+        <Button variant="ghost" size="md" icon={<IconRefreshOutline16 />} onClick={props.onRefresh}>
+          {props.t('refresh')}
+        </Button>
       )}
-      <button type="button" className="kb-icon-btn" onClick={props.onClose}>{props.t('close')}</button>
+      <Button variant="ghost" size="md" icon={<IconCloseOutline16 />} onClick={props.onClose}>
+        {props.t('close')}
+      </Button>
     </header>
   )
 }

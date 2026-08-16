@@ -2,20 +2,22 @@
  * Sidebar entry button and overlay wrapper for the kanban board page.
  *
  * Kept in a `.tsx` file so the browser bundle can parse JSX; the plugin entry
- * (src/client/index.ts) stays plain TypeScript and imports these.
+ * (src/client/index.ts) stays plain TypeScript and imports these. The sidebar
+ * entry uses the primitives Button so it matches the native DSH look.
  */
 
 import { useSyncExternalStore } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { BoardPage, type BoardApi, type BoardWorkspace } from './BoardPage.tsx'
 import { getBoardOpen, subscribeBoard } from './board-state.ts'
 import type { BoardKey } from './locales.ts'
 
-/** Sidebar footer entry button. */
+/** Sidebar footer entry button (native DSH ghost button). */
 export function SidebarKanbanButton(props: { onClick: () => void; t: () => string }) {
   return (
-    <button type="button" className="kb-sidebar-btn" onClick={props.onClick}>
+    <Button variant="ghost" size="md" className="kb-sidebar-btn" onClick={props.onClick}>
       {props.t()}
-    </button>
+    </Button>
   )
 }
 
