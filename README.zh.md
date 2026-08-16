@@ -139,6 +139,19 @@ pnpm bundle    # 产出 lib/index.js + lib/client.js
 - `src/client/` 是浏览器插件；client bundle 保持 `@deepseek-ai/*` + `react` external（运行时从 loader 模块表解析），其余内联。
 - UI 使用 `--dsw-alias-*` 设计令牌，命名空间 `kb-` 前缀避免冲突。
 
+## 验证
+
+```sh
+pnpm test     # 14 个 KANBAN.json 领域单测 + Host 工具注册/执行冒烟
+pnpm verify   # 4 个 board 工具注册 + board_add 端到端落盘
+pnpm accept   # 对运行中的 dsh web (http://127.0.0.1:3080) 做 GUI 验收：
+              #   侧边栏入口 → 全屏三列页 → 新增/移动/删除
+```
+
+`scripts/verify-model-board.mjs` 额外验证**真实模型调用**：向 GUI 会话发一条让模型用
+`board_add`/`board_list` 的指令，确认卡片写入会话 cwd 的 `KANBAN.json`、并能在看板页读到
+（模型侧写入 ↔ Web 侧可见的双向闭环）。
+
 ## 许可
 
 [MIT](LICENSE)

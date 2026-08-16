@@ -129,6 +129,20 @@ pnpm bundle    # emits lib/index.js + lib/client.js
 - `src/client/` is the browser plugin; the client bundle keeps `@deepseek-ai/*` + `react` external (resolved from the loader module table at runtime) and inlines everything else.
 - UI uses `--dsw-alias-*` design tokens, namespaced with the `kb-` prefix.
 
+## Verification
+
+```sh
+pnpm test     # 14 KANBAN.json domain unit tests + host tool registration/exec smoke
+pnpm verify   # 4 board tools registered + board_add persisted end-to-end
+pnpm accept   # GUI acceptance against a running dsh web (http://127.0.0.1:3080):
+              #   sidebar entry → full-screen three-column page → add / move / delete
+```
+
+`scripts/verify-model-board.mjs` additionally verifies a **real model call**: it sends
+the GUI agent an instruction to use `board_add`/`board_list`, then confirms the card
+lands in `KANBAN.json` at the session cwd and is visible on the board page (the
+model-writes ↔ Web-sees round trip).
+
 ## License
 
 [MIT](LICENSE)

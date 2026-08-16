@@ -44,6 +44,7 @@
     "prepare": "tsdown --config ./tsdown.config.ts",
     "test": "node --test scripts/board-core.spec.mjs && node scripts/verify-tools.mjs",
     "verify": "node scripts/verify-tools.mjs",
+    "accept": "node scripts/accept-gui.mjs",
     "release:check": "node scripts/release-check.mjs",
     "prepack": "node scripts/release-check.mjs",
     "prepublishOnly": "node scripts/release-check.mjs && tsdown --config ./tsdown.config.ts",
