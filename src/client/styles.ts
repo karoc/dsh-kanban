@@ -111,6 +111,34 @@ export const KANBAN_STYLES = `
   background: var(--dsw-alias-bg-module-platform);
 }
 .kb-composer-row { display: flex; gap: 8px; align-items: center; }
+/* The three "what/why/rejected" inputs: one row, three equal columns — the
+   same rhythm as the board column headers above. */
+.kb-composer-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+.kb-composer-field-col {
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 0;
+}
+.kb-composer-field-label {
+  font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary);
+  font-weight: 600;
+}
+.kb-composer-field-input {
+  flex: 1;
+  min-height: 72px;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--dsw-alias-bg-input, transparent);
+  color: var(--dsw-alias-label-primary);
+  font: inherit; font-size: 13px; line-height: 18px;
+}
+.kb-composer-field-input:focus { outline: none; border-color: var(--dsw-alias-border-l3); }
 .kb-spec {
   margin-top: 16px;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px;

@@ -262,27 +262,38 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
                     {t('add')}
                   </Button>
                 </div>
-                <Input
-                  className="kb-composer-field"
-                  value={draftSummary}
-                  placeholder={t('addSummaryPlaceholder')}
-                  onChange={event => setDraftSummary(event.target.value)}
-                  onKeyDown={event => { if (event.key === 'Enter' && draftTitle.trim() !== '') addCard() }}
-                />
-                <Input
-                  className="kb-composer-field"
-                  value={draftRationale}
-                  placeholder={t('addRationalePlaceholder')}
-                  onChange={event => setDraftRationale(event.target.value)}
-                  onKeyDown={event => { if (event.key === 'Enter' && draftTitle.trim() !== '') addCard() }}
-                />
-                <Input
-                  className="kb-composer-field"
-                  value={draftRejected}
-                  placeholder={t('addRejectedPlaceholder')}
-                  onChange={event => setDraftRejected(event.target.value)}
-                  onKeyDown={event => { if (event.key === 'Enter' && draftTitle.trim() !== '') addCard() }}
-                />
+                <div className="kb-composer-fields">
+                  <label className="kb-composer-field-col">
+                    <span className="kb-composer-field-label">{t('fieldSummary')}</span>
+                    <textarea
+                      className="kb-composer-field-input"
+                      rows={3}
+                      value={draftSummary}
+                      placeholder={t('addSummaryPlaceholder')}
+                      onChange={event => setDraftSummary(event.target.value)}
+                    />
+                  </label>
+                  <label className="kb-composer-field-col">
+                    <span className="kb-composer-field-label">{t('fieldRationale')}</span>
+                    <textarea
+                      className="kb-composer-field-input"
+                      rows={3}
+                      value={draftRationale}
+                      placeholder={t('addRationalePlaceholder')}
+                      onChange={event => setDraftRationale(event.target.value)}
+                    />
+                  </label>
+                  <label className="kb-composer-field-col">
+                    <span className="kb-composer-field-label">{t('fieldRejected')}</span>
+                    <textarea
+                      className="kb-composer-field-input"
+                      rows={3}
+                      value={draftRejected}
+                      placeholder={t('addRejectedPlaceholder')}
+                      onChange={event => setDraftRejected(event.target.value)}
+                    />
+                  </label>
+                </div>
               </div>
               {cwd !== undefined && <NoteSpecEditor api={api} cwd={cwd} t={t} />}
             </>
