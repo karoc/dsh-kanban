@@ -10,9 +10,9 @@ export const en = {
   loading: 'Loading…',
   empty: 'No cards yet. Ask the model to board_add a plan step, or add one below.',
   addPlaceholder: 'New card title…',
-  addSummaryPlaceholder: 'What was done (optional)…',
-  addRationalePlaceholder: 'Why it was done (optional)…',
-  addRejectedPlaceholder: 'What was rejected (optional)…',
+  addSummaryPlaceholder: 'optional',
+  addRationalePlaceholder: 'optional',
+  addRejectedPlaceholder: 'optional',
   add: 'Add',
   remove: 'Remove',
   statusTodo: 'To do',
@@ -40,6 +40,8 @@ export const en = {
   specUpdateWarning: 'The plugin now ships Agent Note spec v{plugin} but this workspace has custom overrides (v{current}). Updating the plugin resets overrides to the new defaults — your custom content will be lost.',
   specOverridesFile: 'Stored at {path}',
   specOverrideActive: 'Custom overrides active.',
+  archivedNotice: 'Archived {count} done card(s) to {path}',
+  sourceSession: 'Open source session',
 }
 
 /** The board page copy key set. */
@@ -55,9 +57,9 @@ export const zh: { [Key in keyof typeof en]: string } = {
   loading: '加载中…',
   empty: '还没有卡片。可以让模型用 board_add 记录计划步骤，或在下方面板新增。',
   addPlaceholder: '新卡片标题…',
-  addSummaryPlaceholder: '做了什么（可选）…',
-  addRationalePlaceholder: '为什么（可选）…',
-  addRejectedPlaceholder: '放弃了什么（可选）…',
+  addSummaryPlaceholder: '可选',
+  addRationalePlaceholder: '可选',
+  addRejectedPlaceholder: '可选',
   add: '新增',
   remove: '删除',
   statusTodo: '待办',
@@ -85,4 +87,6 @@ export const zh: { [Key in keyof typeof en]: string } = {
   specUpdateWarning: '插件现已内置 Agent Note 规范 v{plugin}，但此工作区有自定义覆盖（v{current}）。更新插件会把覆盖重置为新默认值——你自定义的内容会丢失。',
   specOverridesFile: '存储于 {path}',
   specOverrideActive: '自定义覆盖生效中。',
+  archivedNotice: '已归档 {count} 张已完成卡片到 {path}',
+  sourceSession: '打开来源会话',
 }

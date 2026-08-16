@@ -89,10 +89,14 @@ const result = await ctx.tools.execute({
 const text = result.content?.map(block => block.text).join('') ?? ''
 console.log('board_add executed:', text.split('\n')[0])
 const onDisk = JSON.parse(await readFile(join(ws, 'KANBAN.json'), 'utf8'))
-console.log('on-disk cards:', onDisk.cards.length, '| title:', onDisk.cards[0]?.title)
+console.log('on-disk cards:', onDisk.cards.length, '| title:', onDisk.cards[0]?.title, '| source:', onDisk.cards[0]?.sourceSessionId)
 if (onDisk.cards.length !== 1 || onDisk.cards[0].title !== '真实执行验证') {
   console.error('board_add did not persist the expected card')
   process.exit(1)
 }
+if (onDisk.cards[0].sourceSessionId !== fakeAgent.id) {
+  console.error('board_add did not record the owning session id as sourceSessionId')
+  process.exit(1)
+}
 await rm(ws, { recursive: true, force: true })
-console.log('ok: all 4 tools registered and board_add persisted end-to-end')
+console.log('ok: all 4 tools registered and board_add persisted end-to-end (with sourceSessionId)')

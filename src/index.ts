@@ -67,6 +67,7 @@ export interface BoardToolCard {
   summary?: string
   rationale?: string
   rejected?: string
+  sourceSessionId?: string
   status: 'todo' | 'in_progress' | 'done'
   tags: string[]
   createdAt: number
@@ -78,6 +79,7 @@ export interface BoardToolValue {
   path: string
   cards: BoardToolCard[]
   counts: { todo: number; inProgress: number; done: number }
+  archived?: { count: number; path: string }
 }
 
 /** Build a {@link BoardToolValue} from a {@link BoardView}. */
@@ -91,12 +93,14 @@ function toBoardValue(view: BoardView): BoardToolValue {
       ...card.summary === undefined ? {} : { summary: card.summary },
       ...card.rationale === undefined ? {} : { rationale: card.rationale },
       ...card.rejected === undefined ? {} : { rejected: card.rejected },
+      ...card.sourceSessionId === undefined ? {} : { sourceSessionId: card.sourceSessionId },
       status: card.status,
       tags: card.tags,
       createdAt: card.createdAt,
       updatedAt: card.updatedAt,
     })),
     counts: view.counts,
+    ...view.archived !== undefined ? { archived: view.archived } : {},
   }
 }
 
@@ -120,6 +124,7 @@ const BOARD_OUTPUT = {
             summary: { type: 'string' },
             rationale: { type: 'string' },
             rejected: { type: 'string' },
+            sourceSessionId: { type: 'string' },
             status: { type: 'string', required: true, enum: ['todo', 'in_progress', 'done'] },
             tags: { type: 'array', required: true, items: { type: 'string' } },
             createdAt: { type: 'integer', required: true },
@@ -137,6 +142,14 @@ const BOARD_OUTPUT = {
           done: { type: 'integer', required: true },
         },
       },
+      archived: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          count: { type: 'integer', required: true },
+          path: { type: 'string', required: true },
+        },
+      },
     },
   } as const,
   render: (_args: unknown, value: BoardToolValue) => [
@@ -147,6 +160,9 @@ const BOARD_OUTPUT = {
         ...value.cards.map(card =>
           `- [${card.status}] ${card.title}${card.tags.length > 0 ? ` ${card.tags.map(t => `#${t}`).join(' ')}` : ''}`),
         ...value.cards.length === 0 ? ['(no cards yet)'] : [],
+        ...value.archived !== undefined
+          ? [`Archived ${value.archived.count} done card(s) to ${value.archived.path}`]
+          : [],
       ].join('\n'),
     },
   ],
@@ -396,6 +412,7 @@ export function apply(ctx: Context): void {
           ...card.summary === undefined ? {} : { summary: card.summary },
           ...card.rationale === undefined ? {} : { rationale: card.rationale },
           ...card.rejected === undefined ? {} : { rejected: card.rejected },
+          ...card.sourceSessionId === undefined ? {} : { sourceSessionId: card.sourceSessionId },
           status: card.status,
           tags: card.tags,
           createdAt: card.createdAt,
@@ -458,6 +475,7 @@ export function apply(ctx: Context): void {
         ...args.summary === undefined ? {} : { summary: args.summary },
         ...args.rationale === undefined ? {} : { rationale: args.rationale },
         ...args.rejected === undefined ? {} : { rejected: args.rejected },
+        ...exec.agent !== undefined ? { sourceSessionId: exec.agent.id } : {},
         ...args.status === undefined ? {} : { status: args.status as BoardStatus },
         ...args.tags === undefined ? {} : { tags: args.tags },
       }).then(toBoardValue)

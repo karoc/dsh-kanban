@@ -36,6 +36,8 @@ export interface BoardCard {
   rationale?: string
   /** Optional: what was rejected / given up (Agent-Note-style "rejected"). */
   rejected?: string
+  /** Optional: the session id that created this card (locate the handling session). */
+  sourceSessionId?: string
   /** Lifecycle state; drives the board columns. */
   status: BoardStatus
   /** Free-form labels (trimmed, deduped). */
@@ -85,7 +87,8 @@ export function isBoardCard(value: unknown): value is BoardCard {
   if (card.description !== undefined && typeof card.description !== 'string') return false
   if (card.summary !== undefined && typeof card.summary !== 'string') return false
   if (card.rationale !== undefined && typeof card.rationale !== 'string') return false
-  return card.rejected === undefined || typeof card.rejected === 'string'
+  if (card.rejected !== undefined && typeof card.rejected !== 'string') return false
+  return card.sourceSessionId === undefined || typeof card.sourceSessionId === 'string'
 }
 
 /**
@@ -125,6 +128,46 @@ async function writeBoard(cwd: string, board: BoardData): Promise<void> {
   await rename(tmp, path)
 }
 
+/** Max done cards kept on the board; older done cards are archived. */
+export const MAX_DONE_CARDS = 100
+
+/** The archive document path under .agents/notes (git-trackable). */
+export function archivePath(cwd: string): string {
+  if (!isAbsolute(cwd)) throw new TypeError(`kanban: workspace must be an absolute path, got ${JSON.stringify(cwd)}`)
+  return join(cwd, '.agents', 'notes', 'archive.json')
+}
+
+/**
+ * Archive done cards beyond {@link MAX_DONE_CARDS}: the oldest done cards
+ * (by createdAt) are appended to `.agents/notes/archive.json` and removed from
+ * the live board. Returns how many were archived (0 when none). Callers must
+ * write the (mutated) board after this.
+ */
+export async function archiveExcessDone(cwd: string, board: BoardData): Promise<{ count: number; path: string }> {
+  const done = board.cards.filter(card => card.status === 'done')
+  if (done.length <= MAX_DONE_CARDS) return { count: 0, path: archivePath(cwd) }
+  const excess = done.length - MAX_DONE_CARDS
+  const byAge = [...done].sort((a, b) => a.createdAt - b.createdAt)
+  const toArchive = byAge.slice(0, excess)
+  const ids = new Set(toArchive.map(card => card.id))
+  board.cards = board.cards.filter(card => !ids.has(card.id))
+  const path = archivePath(cwd)
+  await mkdir(dirname(path), { recursive: true })
+  let existing: BoardCard[] = []
+  try {
+    const raw = await readFile(path, 'utf8')
+    const parsed = JSON.parse(raw) as { version?: number; archived?: BoardCard[] }
+    if (Array.isArray(parsed.archived)) existing = parsed.archived
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+  existing.push(...toArchive)
+  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
+  await writeFile(tmp, JSON.stringify({ version: 1, archived: existing }, null, 2) + '\n', 'utf8')
+  await rename(tmp, path)
+  return { count: toArchive.length, path }
+}
+
 /** Board counts by status (the UI's column headers). */
 export interface BoardCounts {
   todo: number
@@ -140,17 +183,24 @@ export interface BoardView {
   cards: readonly BoardCard[]
   /** Status counts. */
   counts: BoardCounts
+  /** Archival notice for the most recent mutation (count > 0 when archived). */
+  archived?: { count: number; path: string }
 }
 
 /** Build a detached {@link BoardView} from a document. */
-function viewOf(cwd: string, board: BoardData): BoardView {
+function viewOf(cwd: string, board: BoardData, archived?: { count: number; path: string }): BoardView {
   const counts: BoardCounts = { todo: 0, inProgress: 0, done: 0 }
   for (const card of board.cards) {
     if (card.status === 'todo') counts.todo += 1
     else if (card.status === 'in_progress') counts.inProgress += 1
     else counts.done += 1
   }
-  return { path: boardPath(cwd), cards: board.cards, counts }
+  return {
+    path: boardPath(cwd),
+    cards: board.cards,
+    counts,
+    ...archived !== undefined && archived.count > 0 ? { archived } : {},
+  }
 }
 
 /** Input for creating a card. */
@@ -163,6 +213,8 @@ export interface AddCardInput {
   rationale?: string
   /** What was rejected / given up (Agent-Note style). */
   rejected?: string
+  /** The session id that created the card (locate the handling session). */
+  sourceSessionId?: string
   status?: BoardStatus
   tags?: string[]
 }
@@ -204,14 +256,18 @@ export async function addCard(cwd: string, input: AddCardInput): Promise<BoardVi
     id: `card-${randomUUID()}`,
     title,
     ...fields,
+    ...input.sourceSessionId !== undefined && input.sourceSessionId !== ''
+      ? { sourceSessionId: input.sourceSessionId }
+      : {},
     status: input.status ?? 'todo',
     tags: normalizeTags(input.tags),
     createdAt: now,
     updatedAt: now,
   }
   board.cards.push(card)
+  const archived = await archiveExcessDone(cwd, board)
   await writeBoard(cwd, board)
-  return viewOf(cwd, board)
+  return viewOf(cwd, board, archived)
 }
 
 /** Fields a caller may change on an existing card. */
@@ -266,8 +322,9 @@ export async function updateCard(cwd: string, id: string, input: UpdateCardInput
   if (input.status !== undefined) card.status = input.status
   if (input.tags !== undefined) card.tags = normalizeTags(input.tags)
   card.updatedAt = Date.now()
+  const archived = await archiveExcessDone(cwd, board)
   await writeBoard(cwd, board)
-  return viewOf(cwd, board)
+  return viewOf(cwd, board, archived)
 }
 
 /** Remove one card and return the fresh board view. */
@@ -277,6 +334,7 @@ export async function removeCard(cwd: string, id: string): Promise<BoardView> {
   const index = board.cards.findIndex(card => card.id === id)
   if (index < 0) throw new Error(`kanban: no card with id ${JSON.stringify(id)}`)
   board.cards.splice(index, 1)
+  const archived = await archiveExcessDone(cwd, board)
   await writeBoard(cwd, board)
-  return viewOf(cwd, board)
+  return viewOf(cwd, board, archived)
 }

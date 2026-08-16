@@ -192,3 +192,31 @@ test('shape guards accept valid values and reject invalid ones', () => {
   assert.equal(isBoardCard({ ...valid.cards[0], status: 'archived' }), false)
   assert.equal(isBoardCard({ ...valid.cards[0], tags: [1] }), false)
 })
+
+test('addCard records the source session id', async () => {
+  const ws = await freshWorkspace()
+  const view = await addCard(ws, { title: 's', sourceSessionId: 'session-abc' })
+  assert.equal(view.cards[0].sourceSessionId, 'session-abc')
+  await rm(ws, { recursive: true, force: true })
+})
+
+test('done cards beyond MAX_DONE_CARDS are archived to .agents/notes/archive.json', async () => {
+  const ws = await freshWorkspace()
+  const { MAX_DONE_CARDS, archivePath } = await import('../src/board-core.ts')
+  // Create more than the cap of done cards (each add marks done).
+  const total = MAX_DONE_CARDS + 5
+  let last
+  for (let i = 0; i < total; i++) {
+    last = await addCard(ws, { title: `done-${i}`, status: 'done' })
+  }
+  // Live board keeps at most MAX_DONE_CARDS done cards.
+  const doneLive = last.cards.filter(c => c.status === 'done').length
+  assert.equal(doneLive, MAX_DONE_CARDS)
+  // Archived file holds the 5 oldest done cards (each mutation archives the
+  // oldest excess, so the final archived set is the 5 earliest done cards).
+  const raw = JSON.parse(await readFile(archivePath(ws), 'utf8'))
+  assert.equal(raw.archived.length, 5)
+  assert.equal(raw.archived[0].title, 'done-0')
+  assert.equal(raw.archived[4].title, 'done-4')
+  await rm(ws, { recursive: true, force: true })
+})

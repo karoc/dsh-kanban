@@ -31,6 +31,7 @@ export interface BoardCardView {
   summary?: string
   rationale?: string
   rejected?: string
+  sourceSessionId?: string
   status: 'todo' | 'in_progress' | 'done'
   tags: string[]
   createdAt: number
@@ -42,6 +43,7 @@ export interface BoardViewPayload {
   path: string
   cards: BoardCardView[]
   counts: { todo: number; inProgress: number; done: number }
+  archived?: { count: number; path: string }
 }
 
 /** Wire mutation request body shared by every POST op. */
@@ -106,6 +108,8 @@ export interface BoardPageProps {
   workspace: BoardWorkspace | undefined
   onClose: () => void
   t: (key: BoardKey, params?: Record<string, string>) => string
+  /** Jump to the session that created a card (locate the handling session). */
+  openSession?: (sessionId: string) => void
 }
 
 const STATUSES = ['todo', 'in_progress', 'done'] as const
@@ -128,7 +132,7 @@ function statusLabel(status: BoardCardView['status'], t: BoardPageProps['t']): s
 }
 
 /** The board page component (rendered inside the shell.overlay seat). */
-export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
+export function BoardPage({ api, workspace, onClose, t, openSession }: BoardPageProps) {
   const [cards, setCards] = useState<BoardCardView[]>([])
   const [path, setPath] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(true)
@@ -137,6 +141,7 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
   const [draftSummary, setDraftSummary] = useState('')
   const [draftRationale, setDraftRationale] = useState('')
   const [draftRejected, setDraftRejected] = useState('')
+  const [archivedNotice, setArchivedNotice] = useState<{ count: number; path: string } | undefined>(undefined)
 
   const cwd = workspace?.cwd
 
@@ -167,6 +172,7 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
       const board = await api.mutate({ ...body, cwd })
       setCards(sortCards(board.cards))
       setPath(board.path)
+      setArchivedNotice(board.archived)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
@@ -218,6 +224,11 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
       <BoardHeader onClose={onClose} t={t} path={path} onRefresh={() => { void refresh() }} />
       <div className="kb-body">
         {error !== undefined && <p className="kb-error">{error}</p>}
+        {archivedNotice !== undefined && (
+          <p className="kb-archived">
+            {t('archivedNotice', { count: String(archivedNotice.count), path: archivedNotice.path })}
+          </p>
+        )}
         {loading
           ? <p className="kb-loading">{t('loading')}</p>
           : (
@@ -230,15 +241,18 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
                       <h3 className="kb-column-title">{statusLabel(status, t)}</h3>
                       <span className="kb-column-count">{t('counts', { n: String(grouped[status].length) })}</span>
                     </div>
-                    {grouped[status].map(card => (
-                      <Card
-                        key={card.id}
-                        card={card}
-                        t={t}
-                        onMove={moveCard}
-                        onRemove={removeCard}
-                      />
-                    ))}
+                    <div className="kb-column-cards">
+                      {grouped[status].map(card => (
+                        <Card
+                          key={card.id}
+                          card={card}
+                          t={t}
+                          onMove={moveCard}
+                          onRemove={removeCard}
+                          onOpenSession={openSession}
+                        />
+                      ))}
+                    </div>
                   </section>
                 ))}
               </div>
@@ -434,8 +448,9 @@ function Card(props: {
   t: BoardPageProps['t']
   onMove: (id: string, status: BoardCardView['status']) => void
   onRemove: (id: string) => void
+  onOpenSession?: (sessionId: string) => void
 }) {
-  const { card, t, onMove, onRemove } = props
+  const { card, t, onMove, onRemove, onOpenSession } = props
   const [statusOpen, setStatusOpen] = useState(false)
   const statusItems = STATUSES.map(status => ({
     id: status,
@@ -458,6 +473,17 @@ function Card(props: {
               <span className="kb-card-field-label">{label}:</span> {value}
             </p>
           ))}
+        </div>
+      )}
+      {card.sourceSessionId !== undefined && onOpenSession !== undefined && (
+        <div className="kb-card-meta">
+          <button
+            type="button"
+            className="kb-source-btn"
+            onClick={() => onOpenSession(card.sourceSessionId as string)}
+          >
+            {t('sourceSession')}
+          </button>
         </div>
       )}
       {card.tags.length > 0 && (

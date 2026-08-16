@@ -159,6 +159,13 @@ export function apply(ctx: ClientContext): void {
       api,
       onClose: closeBoard,
       t,
+      // Jump to the session that created a card (locate the handling session).
+      openSession: (sessionId: string) => {
+        const sessions = ctx.get('sessions') as { open: (id: string) => void } | undefined
+        if (sessions === undefined) return
+        closeBoard()
+        sessions.open(sessionId)
+      },
     }),
   }, KanbanOverlay))
 }

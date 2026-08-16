@@ -81,7 +81,13 @@ export const KANBAN_STYLES = `
   padding: 12px; min-height: 120px;
   background: var(--dsw-alias-bg-module-platform);
 }
-.kb-column-head { display: flex; align-items: center; gap: 8px; }
+/* The card list under the column header: at most ~3.5 rows visible, then
+   scrolls. The header stays fixed; only the cards area scrolls. */
+.kb-column-cards {
+  display: flex; flex-direction: column; gap: 10px;
+  max-height: 350px; overflow-y: auto;
+}
+.kb-column-head { display: flex; align-items: center; gap: 8px; flex: none; }
 .kb-column-title { margin: 0; font-size: 13px; line-height: 18px; font-weight: 600; }
 .kb-column-count {
   font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary);
@@ -102,6 +108,13 @@ export const KANBAN_STYLES = `
 .kb-card-field { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); word-break: break-word; }
 .kb-card-field-label { color: var(--dsw-alias-label-tertiary); font-weight: 600; }
 .kb-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kb-source-btn {
+  display: inline-flex; align-items: center;
+  height: 22px; padding: 0 8px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px;
+  background: transparent; color: var(--dsw-alias-label-secondary);
+  font: inherit; font-size: 11px; line-height: 16px; cursor: pointer;
+}
+.kb-source-btn:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .kb-card-actions { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
 .kb-composer-field { flex: 1; min-width: 0; }
 .kb-composer {
@@ -129,7 +142,7 @@ export const KANBAN_STYLES = `
 }
 .kb-composer-field-input {
   flex: 1;
-  min-height: 72px;
+  min-height: 108px;
   box-sizing: border-box;
   resize: vertical;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;
@@ -177,6 +190,13 @@ export const KANBAN_STYLES = `
 }
 .kb-empty { border: 1px dashed var(--dsw-alias-border-l3); border-radius: 12px; }
 .kb-error { color: var(--dsw-alias-interactive-bg-hover-danger); }
+.kb-archived {
+  margin: 0 0 12px; padding: 8px 12px; font-size: 12px; line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  border: 1px solid var(--dsw-alias-border-l3); border-radius: 8px;
+  background: var(--dsw-alias-bg-module);
+  word-break: break-all;
+}
 `
 
 /**

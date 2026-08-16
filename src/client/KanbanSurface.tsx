@@ -39,6 +39,7 @@ export interface BoardOverlayInjected {
   api: BoardApi
   onClose: () => void
   t: (key: BoardKey, params?: Record<string, unknown>) => string
+  openSession?: (sessionId: string) => void
 }
 
 /**
@@ -85,5 +86,13 @@ export function KanbanOverlay(props: BoardOverlayInjected & RootStandardProps) {
     (props.useWorkspaces?.((s: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string }) => s) as { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string }) ?? {},
   )
   if (!open) return null
-  return <BoardPage api={props.api} workspace={workspace} onClose={props.onClose} t={props.t} />
+  return (
+    <BoardPage
+      api={props.api}
+      workspace={workspace}
+      onClose={props.onClose}
+      t={props.t}
+      openSession={props.openSession}
+    />
+  )
 }
