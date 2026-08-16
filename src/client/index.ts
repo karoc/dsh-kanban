@@ -109,25 +109,20 @@ export function apply(ctx: ClientContext): void {
     }),
   }, SidebarKanbanButton))
 
-  // Full-screen overlay: the board page while open, null otherwise.
+  // Full-screen overlay: the board page while open, null otherwise. The
+  // workspace is resolved reactively inside the component from the framework
+  // useSessions/useWorkspaces seats (global standard props), so opening the
+  // page after sessions have loaded picks up the real workspace.
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
     id: 'kanban',
     order: 10,
     locale: NS,
-    inject: (): BoardOverlayInjected => {
-      const sessions = ctx.get('sessions') as { list: { getSnapshot: () => { byId?: Record<string, { cwd?: string }>; current?: string } } } | undefined
-      const workspaces = ctx.get('workspaces') as { list: { getSnapshot: () => { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string } } } | undefined
-      return {
-        api,
-        workspace: resolveWorkspace(
-          sessions?.list.getSnapshot() ?? {},
-          workspaces?.list.getSnapshot() ?? {},
-        ),
-        onClose: closeBoard,
-        t,
-      }
-    },
+    inject: (): Omit<BoardOverlayInjected, 'workspace'> => ({
+      api,
+      onClose: closeBoard,
+      t,
+    }),
   }, KanbanOverlay))
 }
 
