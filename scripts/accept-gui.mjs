@@ -36,22 +36,24 @@ try {
   await page.waitForTimeout(4000)
 
   // 1) Sidebar footer 「看板」 entry — a native primitives Button.
-  const kanbanButton = page.locator('button.kb-sidebar-btn').first()
+  const kanbanButton = page.locator('button.kb-sidebar-trigger').first()
   try {
     await kanbanButton.waitFor({ state: 'visible', timeout: 15000 })
     record('sidebar 「看板」 entry visible', true)
   } catch {
-    record('sidebar 「看板」 entry visible', false, 'button.kb-sidebar-btn not found')
+    record('sidebar 「看板」 entry visible', false, 'button.kb-sidebar-trigger not found')
   }
 
-  // 1b) It is a primitives Button: 36px capsule radius 18 (the DSH ghost button).
+  // 1b) It matches the Settings footer trigger (34px compact row, 12px radius,
+  // left-aligned) and carries an icon.
   if (await kanbanButton.isVisible().catch(() => false)) {
     const style = await kanbanButton.evaluate(el => {
       const s = getComputedStyle(el)
-      return { height: s.height, radius: s.borderRadius, font: s.fontSize }
+      return { height: s.height, radius: s.borderRadius, font: s.fontSize, padLeft: s.paddingLeft }
     })
-    const isPrimitives = style.height === '36px' && style.radius === '18px' && style.font === '14px'
-    record('sidebar entry is a native DSH button', isPrimitives, JSON.stringify(style))
+    const matchesTrigger = style.height === '34px' && style.radius === '12px' && style.font === '14px' && style.padLeft === '10px'
+    const hasIcon = await kanbanButton.locator('svg').count()
+    record('sidebar entry matches the Settings trigger (left-aligned + icon)', matchesTrigger && hasIcon >= 1, JSON.stringify(style) + ` icon=${hasIcon}`)
   }
 
   // 2) Click to open the board page.

@@ -41,11 +41,40 @@ without waiting to be asked:
 | Tool | Purpose |
 |---|---|
 | `board_list` | Read the current workspace board (all cards with status, tags, timestamps). Call it before any update to get real ids. |
-| `board_add` | Add a card (title required; optional description / status / tags). |
-| `board_update` | Update a card by id (status / title / description / tags). |
+| `board_add` | Add a card (title required; optional summary/what, rationale/why, rejected/gave-up, description, status, tags). |
+| `board_update` | Update a card by id (status / title / summary / rationale / rejected / description / tags). |
 | `board_remove` | Remove a card by id. |
+| `note_add` | Write an Agent Note (full replication of the DSH repo discipline) to `.agents/notes/implemented/<class>/<date>-<topic>.md`. |
+| `note_list` | List existing Agent Notes in the current workspace. |
 
 The board is scoped to the **current session's working directory (cwd)**: every session under the same project directory shares one `KANBAN.json` — that's what makes it survive across sessions and branches.
+
+### Editable Agent Note spec (reuse, not re-invention; synced via overrides)
+
+`note_add`'s output format, classes, and "non-trivial change" definition are
+**replicated from the deepseek-harness repo** (no re-inventing the wheel):
+
+| Item | Upstream source |
+|---|---|
+| Note classes | `scripts/agent-note-tree.ts` → `AGENT_NOTE_CLASSES` |
+| Note format | `scripts/verify-agent-note-format.ts` |
+| Non-trivial definition | root `AGENTS.md` ("Non-trivial changes MUST include an Agent Note…") |
+
+- **Plugin ships defaults** (updated per release): `src/note-spec.ts` fixes the
+  default classes, format template, and definition — works out of the box;
+- **User overrides**: the Web board page's **Agent Note spec** section has three
+  inputs to paste newer upstream content over the defaults; overrides are stored
+  at the workspace's `.agents/notes/overrides.json`;
+- **Source hints**: each input states which dsh source file to copy from;
+- **Update warning**: when the plugin ships a newer spec version than a workspace
+  with custom overrides, the page warns that updating the plugin resets overrides
+  to the new defaults (custom content is lost). "Save overrides" acknowledges the
+  current version; "Reset to defaults" clears them.
+
+> Why not `import` dsh directly: `verify-agent-note-format.ts` is a dsh repo
+> internal script — not published, not installable, unreachable from an external
+> plugin. The spec is fixed as constants and synced via "input-box overrides +
+> plugin releases".
 
 ### `/kanban` command
 

@@ -135,6 +135,49 @@ test('removeCard deletes the card and returns the fresh view', async () => {
   await rm(ws, { recursive: true, force: true })
 })
 
+test('addCard stores the what/why/rejected fields', async () => {
+  const ws = await freshWorkspace()
+  const view = await addCard(ws, {
+    title: '决策笔记',
+    summary: '做了看板插件',
+    rationale: '跨会话不丢',
+    rejected: '放弃了 markdown 方案',
+  })
+  assert.equal(view.cards[0].summary, '做了看板插件')
+  assert.equal(view.cards[0].rationale, '跨会话不丢')
+  assert.equal(view.cards[0].rejected, '放弃了 markdown 方案')
+  await rm(ws, { recursive: true, force: true })
+})
+
+test('updateCard sets and clears the what/why/rejected fields', async () => {
+  const ws = await freshWorkspace()
+  const added = await addCard(ws, { title: 'x' })
+  const id = added.cards[0].id
+  const set = await updateCard(ws, id, { summary: 's', rationale: 'r', rejected: 'x' })
+  assert.equal(set.cards[0].summary, 's')
+  assert.equal(set.cards[0].rationale, 'r')
+  assert.equal(set.cards[0].rejected, 'x')
+  const cleared = await updateCard(ws, id, { summary: '', rationale: '' })
+  assert.equal(cleared.cards[0].summary, undefined)
+  assert.equal(cleared.cards[0].rationale, undefined)
+  assert.equal(cleared.cards[0].rejected, 'x')
+  await rm(ws, { recursive: true, force: true })
+})
+
+test('shape guards accept and reject the what/why/rejected fields', () => {
+  const valid = {
+    version: 1,
+    cards: [{
+      id: 'card-1', title: 't', status: 'todo', tags: [],
+      summary: 's', rationale: 'r', rejected: 'x', createdAt: 1, updatedAt: 2,
+    }],
+  }
+  assert.equal(isBoardData(valid), true)
+  assert.equal(isBoardCard({ ...valid.cards[0], summary: 42 }), false)
+  assert.equal(isBoardCard({ ...valid.cards[0], rationale: 42 }), false)
+  assert.equal(isBoardCard({ ...valid.cards[0], rejected: 42 }), false)
+})
+
 test('shape guards accept valid values and reject invalid ones', () => {
   const valid = {
     version: 1,

@@ -28,6 +28,9 @@ export interface BoardCardView {
   id: string
   title: string
   description?: string
+  summary?: string
+  rationale?: string
+  rejected?: string
   status: 'todo' | 'in_progress' | 'done'
   tags: string[]
   createdAt: number
@@ -48,6 +51,9 @@ export interface BoardMutationBody {
   id?: string
   title?: string
   description?: string
+  summary?: string
+  rationale?: string
+  rejected?: string
   status?: BoardCardView['status']
   tags?: string[]
 }
@@ -61,6 +67,29 @@ export interface BoardApi {
   get: (cwd: string) => Promise<BoardViewPayload>
   /** POST one mutation and resolve with the fresh board. */
   mutate: (body: BoardMutationBody) => Promise<BoardViewPayload>
+  /** GET the effective Agent Note spec for a workspace. */
+  getSpec: (cwd: string) => Promise<NoteSpecView>
+  /** POST spec overrides for a workspace. */
+  setSpec: (cwd: string, body: NoteSpecMutation) => Promise<NoteSpecView>
+}
+
+/** The effective Agent Note spec as served by the host. */
+export interface NoteSpecView {
+  specVersion: number
+  pluginSpecVersion: number
+  noteClasses: string[]
+  noteFormat: string
+  nonTrivialDefinition: string
+  hasOverrides: boolean
+  overridesPath: string
+}
+
+/** One spec override mutation. */
+export interface NoteSpecMutation {
+  noteClasses?: string[]
+  noteFormat?: string
+  nonTrivialDefinition?: string
+  acknowledgeSpecVersion?: number
 }
 
 /** The resolved workspace for this board view. */
@@ -105,7 +134,9 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>(undefined)
   const [draftTitle, setDraftTitle] = useState('')
-  const [draftDescription, setDraftDescription] = useState('')
+  const [draftSummary, setDraftSummary] = useState('')
+  const [draftRationale, setDraftRationale] = useState('')
+  const [draftRejected, setDraftRejected] = useState('')
 
   const cwd = workspace?.cwd
 
@@ -147,11 +178,15 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
     void applyMutation({
       op: 'add',
       title,
-      ...draftDescription.trim() !== '' ? { description: draftDescription.trim() } : {},
+      ...draftSummary.trim() !== '' ? { summary: draftSummary.trim() } : {},
+      ...draftRationale.trim() !== '' ? { rationale: draftRationale.trim() } : {},
+      ...draftRejected.trim() !== '' ? { rejected: draftRejected.trim() } : {},
     })
     setDraftTitle('')
-    setDraftDescription('')
-  }, [applyMutation, cwd, draftTitle, draftDescription])
+    setDraftSummary('')
+    setDraftRationale('')
+    setDraftRejected('')
+  }, [applyMutation, cwd, draftTitle, draftSummary, draftRationale, draftRejected])
 
   const moveCard = useCallback((id: string, status: BoardCardView['status']): void => {
     void applyMutation({ op: 'update', id, status })
@@ -229,12 +264,27 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
                 </div>
                 <Input
                   className="kb-composer-field"
-                  value={draftDescription}
-                  placeholder={t('addDescriptionPlaceholder')}
-                  onChange={event => setDraftDescription(event.target.value)}
+                  value={draftSummary}
+                  placeholder={t('addSummaryPlaceholder')}
+                  onChange={event => setDraftSummary(event.target.value)}
+                  onKeyDown={event => { if (event.key === 'Enter' && draftTitle.trim() !== '') addCard() }}
+                />
+                <Input
+                  className="kb-composer-field"
+                  value={draftRationale}
+                  placeholder={t('addRationalePlaceholder')}
+                  onChange={event => setDraftRationale(event.target.value)}
+                  onKeyDown={event => { if (event.key === 'Enter' && draftTitle.trim() !== '') addCard() }}
+                />
+                <Input
+                  className="kb-composer-field"
+                  value={draftRejected}
+                  placeholder={t('addRejectedPlaceholder')}
+                  onChange={event => setDraftRejected(event.target.value)}
                   onKeyDown={event => { if (event.key === 'Enter' && draftTitle.trim() !== '') addCard() }}
                 />
               </div>
+              {cwd !== undefined && <NoteSpecEditor api={api} cwd={cwd} t={t} />}
             </>
           )}
       </div>
@@ -242,7 +292,132 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
   )
 }
 
-/** One card row: title, optional description, tags, and a status Menu + delete. */
+/** The Agent Note spec editor: editable overrides + upstream source + update warning. */
+function NoteSpecEditor(props: { api: BoardApi; cwd: string; t: BoardPageProps['t'] }) {
+  const { api, cwd, t } = props
+  const [open, setOpen] = useState(false)
+  const [spec, setSpec] = useState<NoteSpecView | undefined>(undefined)
+  const [classesDraft, setClassesDraft] = useState('')
+  const [formatDraft, setFormatDraft] = useState('')
+  const [definitionDraft, setDefinitionDraft] = useState('')
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | undefined>(undefined)
+
+  const load = useCallback(async (): Promise<void> => {
+    try {
+      const view = await api.getSpec(cwd)
+      setSpec(view)
+      setClassesDraft(view.noteClasses.join(', '))
+      setFormatDraft(view.noteFormat)
+      setDefinitionDraft(view.nonTrivialDefinition)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }, [api, cwd])
+
+  useEffect(() => {
+    if (open) void load()
+  }, [open, load])
+
+  const save = useCallback(async (): Promise<void> => {
+    setError(undefined)
+    setSaved(false)
+    try {
+      const classes = classesDraft.split(',').map(s => s.trim()).filter(s => s !== '')
+      const view = await api.setSpec(cwd, {
+        noteClasses: classes,
+        noteFormat: formatDraft,
+        nonTrivialDefinition: definitionDraft,
+        acknowledgeSpecVersion: spec?.pluginSpecVersion,
+      })
+      setSpec(view)
+      setSaved(true)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }, [api, cwd, classesDraft, formatDraft, definitionDraft, spec?.pluginSpecVersion])
+
+  const reset = useCallback(async (): Promise<void> => {
+    setError(undefined)
+    setSaved(false)
+    try {
+      // Empty overrides = defaults; acknowledge current plugin version.
+      const view = await api.setSpec(cwd, {
+        noteClasses: [],
+        noteFormat: '',
+        nonTrivialDefinition: '',
+        acknowledgeSpecVersion: spec?.pluginSpecVersion,
+      })
+      setSpec(view)
+      setClassesDraft(view.noteClasses.join(', '))
+      setFormatDraft(view.noteFormat)
+      setDefinitionDraft(view.nonTrivialDefinition)
+      setSaved(true)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }, [api, cwd, spec?.pluginSpecVersion])
+
+  const needsUpdateWarning = spec !== undefined
+    && spec.hasOverrides
+    && spec.specVersion !== spec.pluginSpecVersion
+
+  return (
+    <section className="kb-spec">
+      <button type="button" className="kb-spec-toggle" onClick={() => setOpen(v => !v)} aria-expanded={open}>
+        <span>{t('specTitle')}</span>
+        {spec !== undefined && spec.hasOverrides && <span className="kb-spec-active">{t('specOverrideActive')}</span>}
+      </button>
+      {open && (
+        <div className="kb-spec-body">
+          {needsUpdateWarning && spec !== undefined && (
+            <p className="kb-spec-warning">{t('specUpdateWarning', { plugin: String(spec.pluginSpecVersion), current: String(spec.specVersion) })}</p>
+          )}
+          <p className="kb-spec-intro">{t('specIntro')}</p>
+          <label className="kb-spec-label">
+            {t('specClassesLabel')}
+            <textarea
+              className="kb-spec-input"
+              rows={2}
+              value={classesDraft}
+              onChange={event => setClassesDraft(event.target.value)}
+            />
+            <span className="kb-spec-source">{t('specClassesSource')}</span>
+          </label>
+          <label className="kb-spec-label">
+            {t('specFormatLabel')}
+            <textarea
+              className="kb-spec-input kb-spec-monospace"
+              rows={8}
+              value={formatDraft}
+              onChange={event => setFormatDraft(event.target.value)}
+            />
+            <span className="kb-spec-source">{t('specFormatSource')}</span>
+          </label>
+          <label className="kb-spec-label">
+            {t('specDefinitionLabel')}
+            <textarea
+              className="kb-spec-input"
+              rows={4}
+              value={definitionDraft}
+              onChange={event => setDefinitionDraft(event.target.value)}
+            />
+            <span className="kb-spec-source">{t('specDefinitionSource')}</span>
+          </label>
+          {error !== undefined && <p className="kb-error">{error}</p>}
+          {saved && <p className="kb-spec-saved">{t('specSaved')}</p>}
+          <div className="kb-spec-actions">
+            <Button variant="primary" size="sm" onClick={() => { void save() }}>{t('specSave')}</Button>
+            <Button variant="ghost" size="sm" onClick={() => { void reset() }}>{t('specReset')}</Button>
+          </div>
+          {spec !== undefined && <p className="kb-spec-source">{t('specOverridesFile', { path: spec.overridesPath })}</p>}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** One card row: title, the what/why/rejected fields, tags, status Menu + delete. */
 function Card(props: {
   card: BoardCardView
   t: BoardPageProps['t']
@@ -256,10 +431,24 @@ function Card(props: {
     label: statusLabel(status, t),
     ...status === card.status ? { icon: <IconCheckOutline16 /> } : {},
   }))
+  const fields: Array<[string, string | undefined]> = [
+    [t('fieldSummary'), card.summary],
+    [t('fieldRationale'), card.rationale],
+    [t('fieldRejected'), card.rejected],
+  ]
   return (
     <article className="kb-card" data-card-id={card.id}>
       <h4 className="kb-card-title">{card.title}</h4>
       {card.description !== undefined && <p className="kb-card-desc">{card.description}</p>}
+      {fields.some(([, value]) => value !== undefined) && (
+        <div className="kb-card-fields">
+          {fields.map(([label, value]) => value !== undefined && value !== '' && (
+            <p key={label} className="kb-card-field">
+              <span className="kb-card-field-label">{label}:</span> {value}
+            </p>
+          ))}
+        </div>
+      )}
       {card.tags.length > 0 && (
         <div className="kb-card-meta">
           {card.tags.map(tag => <Pill key={tag} active>{tag}</Pill>)}

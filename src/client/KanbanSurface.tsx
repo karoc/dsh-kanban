@@ -3,21 +3,34 @@
  *
  * Kept in a `.tsx` file so the browser bundle can parse JSX; the plugin entry
  * (src/client/index.ts) stays plain TypeScript and imports these. The sidebar
- * entry uses the primitives Button so it matches the native DSH look.
+ * entry mirrors the Settings footer trigger (icon + label, left-aligned,
+ * 34px compact row) so it lines up with the Settings entry below it.
  */
 
 import { useSyncExternalStore } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChecklistOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { BoardPage, type BoardApi, type BoardWorkspace } from './BoardPage.tsx'
 import { getBoardOpen, subscribeBoard } from './board-state.ts'
 import type { BoardKey } from './locales.ts'
 
-/** Sidebar footer entry button (native DSH ghost button). */
-export function SidebarKanbanButton(props: { onClick: () => void; t: () => string }) {
+/**
+ * Sidebar footer entry button: icon + label, left-aligned, styled exactly
+ * like the Settings trigger (34px compact row, 12px radius, 10px left pad)
+ * so it sits flush with the Settings entry below it. The rail (collapsed)
+ * state shows only the icon, like the other rail controls.
+ */
+export function SidebarKanbanButton(props: { onClick: () => void; t: () => string; wide?: boolean }) {
+  const wide = props.wide ?? true
   return (
-    <Button variant="ghost" size="md" className="kb-sidebar-btn" onClick={props.onClick}>
-      {props.t()}
-    </Button>
+    <button
+      type="button"
+      className={wide ? 'kb-sidebar-trigger' : 'kb-sidebar-trigger kb-sidebar-trigger-rail'}
+      aria-label={props.t()}
+      onClick={props.onClick}
+    >
+      <IconChecklistOutline14 size={wide ? 16 : 18} />
+      {wide && <span className="kb-sidebar-trigger-label">{props.t()}</span>}
+    </button>
   )
 }
 

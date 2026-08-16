@@ -30,6 +30,12 @@ export interface BoardCard {
   title: string
   /** Optional free-form detail. */
   description?: string
+  /** Optional: what was done (Agent-Note-style "what"). */
+  summary?: string
+  /** Optional: why it was done (Agent-Note-style "why"). */
+  rationale?: string
+  /** Optional: what was rejected / given up (Agent-Note-style "rejected"). */
+  rejected?: string
   /** Lifecycle state; drives the board columns. */
   status: BoardStatus
   /** Free-form labels (trimmed, deduped). */
@@ -76,7 +82,10 @@ export function isBoardCard(value: unknown): value is BoardCard {
   if (!BOARD_STATUSES.includes(card.status as BoardStatus)) return false
   if (!Array.isArray(card.tags) || !card.tags.every(tag => typeof tag === 'string')) return false
   if (typeof card.createdAt !== 'number' || typeof card.updatedAt !== 'number') return false
-  return card.description === undefined || typeof card.description === 'string'
+  if (card.description !== undefined && typeof card.description !== 'string') return false
+  if (card.summary !== undefined && typeof card.summary !== 'string') return false
+  if (card.rationale !== undefined && typeof card.rationale !== 'string') return false
+  return card.rejected === undefined || typeof card.rejected === 'string'
 }
 
 /**
@@ -148,6 +157,12 @@ function viewOf(cwd: string, board: BoardData): BoardView {
 export interface AddCardInput {
   title: string
   description?: string
+  /** What was done (Agent-Note style). */
+  summary?: string
+  /** Why it was done (Agent-Note style). */
+  rationale?: string
+  /** What was rejected / given up (Agent-Note style). */
+  rejected?: string
   status?: BoardStatus
   tags?: string[]
 }
@@ -163,6 +178,14 @@ function normalizeTags(tags: string[] | undefined): string[] {
   return [...seen]
 }
 
+/** Include a non-empty optional text field in a card object; empty clears it. */
+function optionalText(target: Record<string, unknown>, field: 'description' | 'summary' | 'rationale' | 'rejected', value: string | undefined): void {
+  if (value === undefined) return
+  const trimmed = value.trim()
+  if (trimmed === '') delete target[field]
+  else target[field] = trimmed
+}
+
 /** Add one card and return the fresh board view. */
 export async function addCard(cwd: string, input: AddCardInput): Promise<BoardView> {
   const title = input.title.trim()
@@ -172,12 +195,15 @@ export async function addCard(cwd: string, input: AddCardInput): Promise<BoardVi
   }
   const board = await readBoard(cwd)
   const now = Date.now()
+  const fields: Record<string, string> = {}
+  optionalText(fields, 'description', input.description)
+  optionalText(fields, 'summary', input.summary)
+  optionalText(fields, 'rationale', input.rationale)
+  optionalText(fields, 'rejected', input.rejected)
   const card: BoardCard = {
     id: `card-${randomUUID()}`,
     title,
-    ...input.description !== undefined && input.description.trim() !== ''
-      ? { description: input.description.trim() }
-      : {},
+    ...fields,
     status: input.status ?? 'todo',
     tags: normalizeTags(input.tags),
     createdAt: now,
@@ -192,6 +218,9 @@ export async function addCard(cwd: string, input: AddCardInput): Promise<BoardVi
 export interface UpdateCardInput {
   title?: string
   description?: string
+  summary?: string
+  rationale?: string
+  rejected?: string
   status?: BoardStatus
   tags?: string[]
 }
@@ -206,7 +235,8 @@ export async function updateCard(cwd: string, id: string, input: UpdateCardInput
     throw new TypeError(`kanban: invalid status ${JSON.stringify(input.status)}`)
   }
   if (input.title === undefined && input.description === undefined
-    && input.status === undefined && input.tags === undefined) {
+    && input.summary === undefined && input.rationale === undefined
+    && input.rejected === undefined && input.status === undefined && input.tags === undefined) {
     throw new TypeError('kanban: card update requires at least one field')
   }
   const board = await readBoard(cwd)
@@ -214,8 +244,24 @@ export async function updateCard(cwd: string, id: string, input: UpdateCardInput
   if (card === undefined) throw new Error(`kanban: no card with id ${JSON.stringify(id)}`)
   if (input.title !== undefined) card.title = input.title.trim()
   if (input.description !== undefined) {
-    if (input.description.trim() === '') delete card.description
-    else card.description = input.description.trim()
+    const v = input.description.trim()
+    if (v === '') delete card.description
+    else card.description = v
+  }
+  if (input.summary !== undefined) {
+    const v = input.summary.trim()
+    if (v === '') delete card.summary
+    else card.summary = v
+  }
+  if (input.rationale !== undefined) {
+    const v = input.rationale.trim()
+    if (v === '') delete card.rationale
+    else card.rationale = v
+  }
+  if (input.rejected !== undefined) {
+    const v = input.rejected.trim()
+    if (v === '') delete card.rejected
+    else card.rejected = v
   }
   if (input.status !== undefined) card.status = input.status
   if (input.tags !== undefined) card.tags = normalizeTags(input.tags)

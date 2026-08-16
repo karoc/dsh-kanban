@@ -32,12 +32,18 @@ await ctx.plugin(kanban)
 // Let service proxies settle.
 await new Promise(resolve => setTimeout(resolve, 200))
 
-// 1) The four board tools are registered with valid schemas.
+// 1) All six model-facing tools are registered (4 board + 2 note).
 const schemas = ctx.tools.schemas()
 const board = schemas.map(s => s.name).filter(n => n.startsWith('board_'))
+const notes = schemas.map(s => s.name).filter(n => n.startsWith('note_'))
 console.log('board tools:', board.join(', '))
+console.log('note tools:', notes.join(', '))
 if (board.length !== 4) {
   console.error('expected 4 board tools')
+  process.exit(1)
+}
+if (notes.length !== 2) {
+  console.error('expected 2 note tools')
   process.exit(1)
 }
 
@@ -45,13 +51,34 @@ if (board.length !== 4) {
 // (registration itself does not throw while these services exist).
 console.log('systemPrompt section + /kanban command registration: ok')
 
-// 2) board_add executes end-to-end: the owning agent's session cwd resolves the
-// workspace and the card lands in <cwd>/KANBAN.json.
+// 1c) note_add executes end-to-end: writes .agents/notes/implemented/<class>/...
 const ws = await mkdtemp(join(tmpdir(), 'kanban-exec-'))
 const fakeAgent = {
   id: 'session-verify-1',
   session: { header: { cwd: ws } },
 }
+const noteResult = await ctx.tools.execute({
+  callId: 'call-note-1',
+  name: 'note_add',
+  arguments: {
+    class: 'feature',
+    topic: 'verify-tool',
+    problem: 'need to verify note_add',
+    decision: 'wrote a note through the tool',
+    alternatives: 'none',
+  },
+  agent: fakeAgent,
+  signal: new AbortController().signal,
+})
+const noteText = noteResult.content?.map(block => block.text).join('') ?? ''
+console.log('note_add executed:', noteText)
+if (!noteText.includes('.agents/notes/implemented/feature/')) {
+  console.error('note_add did not write under .agents/notes/implemented/feature/')
+  process.exit(1)
+}
+
+// 2) board_add executes end-to-end: the owning agent's session cwd resolves the
+// workspace and the card lands in <cwd>/KANBAN.json.
 const result = await ctx.tools.execute({
   callId: 'call-verify-1',
   name: 'board_add',

@@ -18,7 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import { BoardPage, type BoardApi, type BoardViewPayload, type BoardWorkspace } from './BoardPage.tsx'
+import { BoardPage, type BoardApi, type BoardMutationBody, type BoardViewPayload, type BoardWorkspace, type NoteSpecMutation, type NoteSpecView } from './BoardPage.tsx'
 import { closeBoard, openBoard } from './board-state.ts'
 import { KanbanOverlay, SidebarKanbanButton, type BoardOverlayInjected } from './KanbanSurface.tsx'
 import { en, zh, type BoardKey } from './locales.ts'
@@ -63,6 +63,7 @@ function resolveWorkspace(
 /** Build the fetch-backed board api bound to this origin. */
 function createBoardApi(): BoardApi {
   const endpoint = '/kanban/api'
+  const specEndpoint = '/kanban/spec'
   const get = async (cwd: string): Promise<BoardViewPayload> => {
     const response = await fetch(`${endpoint}?cwd=${encodeURIComponent(cwd)}`)
     const body = await response.json() as { ok: boolean; error?: string } & Partial<BoardViewPayload>
@@ -71,7 +72,7 @@ function createBoardApi(): BoardApi {
     }
     return { path: body.path as string, cards: body.cards, counts: body.counts as BoardViewPayload['counts'] }
   }
-  const mutate = async (payload: { cwd: string; op: 'add' | 'update' | 'remove'; id?: string; title?: string; description?: string; status?: string; tags?: string[] }): Promise<BoardViewPayload> => {
+  const mutate = async (payload: BoardMutationBody): Promise<BoardViewPayload> => {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -83,7 +84,43 @@ function createBoardApi(): BoardApi {
     }
     return { path: body.path as string, cards: body.cards, counts: body.counts as BoardViewPayload['counts'] }
   }
-  return { get, mutate }
+  const getSpec = async (cwd: string): Promise<NoteSpecView> => {
+    const response = await fetch(`${specEndpoint}?cwd=${encodeURIComponent(cwd)}`)
+    const body = await response.json() as { ok: boolean; error?: string } & Partial<NoteSpecView>
+    if (!response.ok || body.ok !== true || body.specVersion === undefined) {
+      throw new Error(body.error ?? `kanban: GET /kanban/spec failed with ${response.status}`)
+    }
+    return {
+      specVersion: body.specVersion as number,
+      pluginSpecVersion: body.pluginSpecVersion as number,
+      noteClasses: body.noteClasses as string[],
+      noteFormat: body.noteFormat as string,
+      nonTrivialDefinition: body.nonTrivialDefinition as string,
+      hasOverrides: body.hasOverrides as boolean,
+      overridesPath: body.overridesPath as string,
+    }
+  }
+  const setSpec = async (cwd: string, mutation: NoteSpecMutation): Promise<NoteSpecView> => {
+    const response = await fetch(specEndpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd, ...mutation }),
+    })
+    const body = await response.json() as { ok: boolean; error?: string } & Partial<NoteSpecView>
+    if (!response.ok || body.ok !== true || body.specVersion === undefined) {
+      throw new Error(body.error ?? `kanban: POST /kanban/spec failed with ${response.status}`)
+    }
+    return {
+      specVersion: body.specVersion as number,
+      pluginSpecVersion: body.pluginSpecVersion as number,
+      noteClasses: body.noteClasses as string[],
+      noteFormat: body.noteFormat as string,
+      nonTrivialDefinition: body.nonTrivialDefinition as string,
+      hasOverrides: body.hasOverrides as boolean,
+      overridesPath: body.overridesPath as string,
+    }
+  }
+  return { get, mutate, getSpec, setSpec }
 }
 
 /**

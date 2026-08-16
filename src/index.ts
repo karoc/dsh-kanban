@@ -27,6 +27,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { mkdir, readdir, writeFile } from 'node:fs/promises'
+import { basename, isAbsolute, join } from 'node:path'
 import { URL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
@@ -40,6 +42,17 @@ import {
   type BoardStatus,
   type BoardView,
 } from './board-core.ts'
+import {
+  DEFAULT_NON_TRIVIAL_DEFINITION,
+  DEFAULT_NOTE_CLASSES,
+  DEFAULT_NOTE_FORMAT,
+  NOTE_SPEC_VERSION,
+  effectiveNoteSpec,
+  noteOverridesPath,
+  writeNoteOverrides,
+  type EffectiveNoteSpec,
+  type NoteSpecOverrides,
+} from './note-spec.ts'
 
 export const name = 'dsh-kanban'
 export const inject = ['tools', 'webServer', 'systemPrompt', 'commands']
@@ -51,6 +64,9 @@ export interface BoardToolCard {
   id: string
   title: string
   description?: string
+  summary?: string
+  rationale?: string
+  rejected?: string
   status: 'todo' | 'in_progress' | 'done'
   tags: string[]
   createdAt: number
@@ -72,6 +88,9 @@ function toBoardValue(view: BoardView): BoardToolValue {
       id: card.id,
       title: card.title,
       ...card.description === undefined ? {} : { description: card.description },
+      ...card.summary === undefined ? {} : { summary: card.summary },
+      ...card.rationale === undefined ? {} : { rationale: card.rationale },
+      ...card.rejected === undefined ? {} : { rejected: card.rejected },
       status: card.status,
       tags: card.tags,
       createdAt: card.createdAt,
@@ -98,6 +117,9 @@ const BOARD_OUTPUT = {
             id: { type: 'string', required: true },
             title: { type: 'string', required: true },
             description: { type: 'string' },
+            summary: { type: 'string' },
+            rationale: { type: 'string' },
+            rejected: { type: 'string' },
             status: { type: 'string', required: true, enum: ['todo', 'in_progress', 'done'] },
             tags: { type: 'array', required: true, items: { type: 'string' } },
             createdAt: { type: 'integer', required: true },
@@ -143,10 +165,11 @@ function present(title: string, kind: 'read' | 'other', rawInput?: unknown): Gen
 }
 
 /**
- * The system-prompt guidance that tells the model to actually USE the board.
- * This is what makes it an active maintenance habit instead of a passive tool:
- * record plans as they appear, move cards as work progresses, close them when
- * done — across sessions, so switching branches never loses the thread.
+ * The system-prompt guidance that tells the model to actually USE the board
+ * and to keep Agent Notes for non-trivial changes. This is what makes it an
+ * active maintenance habit instead of a passive tool: record plans as they
+ * appear, move cards as work progresses, close them when done — across
+ * sessions — and write a durable decision note for every non-trivial change.
  */
 const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) backed by '
   + 'KANBAN.json at the workspace root — it survives session switches and branches, and it '
@@ -157,7 +180,14 @@ const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) b
   + 'superseded, mark it done or remove it. Prefer the board over todo_write for anything the '
   + 'user should still see after switching branches or opening a new session: todo_write is '
   + 'the transient in-turn task list, while the board is the durable cross-session record. '
-  + 'Check board_list when resuming work in a workspace to pick up what was planned before.'
+  + 'Check board_list when resuming work in a workspace to pick up what was planned before.\n\n'
+  + 'You also maintain Agent Notes (the note_add / note_list tools) at '
+  + '.agents/notes/implemented/<class>/<date>-<topic>.md, mirroring the DeepSeek Harness '
+  + `repository discipline. ${DEFAULT_NON_TRIVIAL_DEFINITION} `
+  + 'After completing a non-trivial change, call note_add with: a class from '
+  + `{${DEFAULT_NOTE_CLASSES.join(', ')}}; a short kebab-case `
+  + 'topic; the problem being solved; the decision made; what alternatives were rejected and '
+  + 'why; and consequences. Keep it a few paragraphs, not a full essay.'
 
 /** Execute the human `/kanban` command against the receiving agent's workspace. */
 async function executeBoardCommand(ctx: Context, invocation: CommandInvocation): Promise<CommandResult> {
@@ -224,6 +254,119 @@ function registerBoardCommand(ctx: Context): void {
   })
 }
 
+// ── Agent Notes (complete replication of the DSH repository discipline) ────
+
+/**
+ * The default closed set of Agent Note classes (mirrors DSH's classification
+ * gate). The tool schema advertises the defaults; at execution time the
+ * workspace's effective spec (defaults + user overrides) is authoritative.
+ */
+export const NOTE_CLASSES = DEFAULT_NOTE_CLASSES
+export type NoteClass = (typeof NOTE_CLASSES)[number]
+
+/** Canonical note file name: <yyyy-mm-dd>-<kebab-topic>.md */
+function noteFileName(topic: string): string {
+  const kebab = topic.trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  const today = new Date().toISOString().slice(0, 10)
+  return `${today}-${kebab === '' ? 'note' : kebab}.md`
+}
+
+/** Resolve a note path under the workspace. */
+function notePath(cwd: string, noteClass: NoteClass, topic: string): string {
+  if (!isAbsolute(cwd)) throw new TypeError(`kanban: workspace must be an absolute path, got ${JSON.stringify(cwd)}`)
+  return join(cwd, '.agents', 'notes', 'implemented', noteClass, noteFileName(topic))
+}
+
+/** Render the note body template with the note's fields. */
+function renderNoteBody(spec: EffectiveNoteSpec, title: string, body: {
+  problem: string
+  decision: string
+  alternatives?: string
+  consequences?: string
+}): string {
+  const alternatives = body.alternatives?.trim() ?? ''
+  const consequences = body.consequences?.trim() ?? ''
+  const alternativesSection = alternatives === ''
+    ? ''
+    : `## Alternatives considered\n\n${alternatives}`
+  const consequencesSection = consequences === ''
+    ? ''
+    : `## Consequences\n\n${consequences}`
+  return spec.noteFormat
+    .replaceAll('{{title}}', title)
+    .replaceAll('{{problem}}', body.problem.trim())
+    .replaceAll('{{decision}}', body.decision.trim())
+    .replaceAll('{{alternatives}}', alternatives)
+    .replaceAll('{{consequences}}', consequences)
+    .replaceAll('{{alternatives_section}}', alternativesSection)
+    .replaceAll('{{consequences_section}}', consequencesSection)
+}
+
+/** Write one Agent Note file using the workspace's effective spec. */
+async function writeAgentNote(cwd: string, noteClass: NoteClass, topic: string, body: {
+  problem: string
+  decision: string
+  alternatives?: string
+  consequences?: string
+}): Promise<string> {
+  const spec = await effectiveNoteSpec(cwd)
+  if (noteClass !== undefined && !spec.noteClasses.includes(noteClass)) {
+    throw new TypeError(`kanban: note class ${JSON.stringify(noteClass)} is not in the effective note classes (${spec.noteClasses.join(', ')})`)
+  }
+  const path = notePath(cwd, noteClass, topic)
+  const title = topic.trim()
+  if (title === '') throw new TypeError('kanban: note topic must be a non-empty string')
+  if (body.problem.trim() === '' || body.decision.trim() === '') {
+    throw new TypeError('kanban: note requires a problem and a decision')
+  }
+  const content = renderNoteBody(spec, title, body) + '\n'
+  await mkdir(join(path, '..'), { recursive: true })
+  await writeFile(path, content, 'utf8')
+  return path
+}
+
+/** Canonical note tool output. */
+export interface NoteToolValue {
+  path: string
+  noteClass: NoteClass
+  topic: string
+}
+
+const NOTE_OUTPUT = {
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      path: { type: 'string', required: true },
+      noteClass: { type: 'string', required: true, enum: NOTE_CLASSES },
+      topic: { type: 'string', required: true },
+    },
+  } as const,
+  render: (_args: unknown, value: NoteToolValue) => [
+    { type: 'text' as const, text: `Agent Note written to ${value.path}` },
+  ],
+}
+
+/** List existing Agent Notes under the workspace, grouped by class. */
+async function listAgentNotes(cwd: string): Promise<string[]> {
+  if (!isAbsolute(cwd)) throw new TypeError(`kanban: workspace must be an absolute path, got ${JSON.stringify(cwd)}`)
+  const root = join(cwd, '.agents', 'notes', 'implemented')
+  const found: string[] = []
+  for (const noteClass of NOTE_CLASSES) {
+    try {
+      const entries = await readdir(join(root, noteClass))
+      for (const entry of entries) {
+        if (entry.endsWith('.md')) found.push(join(root, noteClass, entry))
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+  }
+  return found.sort()
+}
+
 /** Register the four model-facing board tools. */
 export function apply(ctx: Context): void {
   // Tell the model when/why to use the board (tool-guidance range 100-199).
@@ -250,6 +393,9 @@ export function apply(ctx: Context): void {
           id: card.id,
           title: card.title,
           ...card.description === undefined ? {} : { description: card.description },
+          ...card.summary === undefined ? {} : { summary: card.summary },
+          ...card.rationale === undefined ? {} : { rationale: card.rationale },
+          ...card.rejected === undefined ? {} : { rejected: card.rejected },
           status: card.status,
           tags: card.tags,
           createdAt: card.createdAt,
@@ -280,6 +426,18 @@ export function apply(ctx: Context): void {
         type: 'string',
         description: 'Optional free-form detail for the card.',
       },
+      summary: {
+        type: 'string',
+        description: 'Optional: what was done (Agent-Note style).',
+      },
+      rationale: {
+        type: 'string',
+        description: 'Optional: why it was done (Agent-Note style).',
+      },
+      rejected: {
+        type: 'string',
+        description: 'Optional: what was rejected or given up (Agent-Note style).',
+      },
       status: {
         type: 'string',
         enum: STATUSES,
@@ -297,6 +455,9 @@ export function apply(ctx: Context): void {
       return addCard(cwd, {
         title: args.title,
         ...args.description === undefined ? {} : { description: args.description },
+        ...args.summary === undefined ? {} : { summary: args.summary },
+        ...args.rationale === undefined ? {} : { rationale: args.rationale },
+        ...args.rejected === undefined ? {} : { rejected: args.rejected },
         ...args.status === undefined ? {} : { status: args.status as BoardStatus },
         ...args.tags === undefined ? {} : { tags: args.tags },
       }).then(toBoardValue)
@@ -322,6 +483,9 @@ export function apply(ctx: Context): void {
       },
       title: { type: 'string', description: 'Replacement title.' },
       description: { type: 'string', description: 'Replacement description; empty string clears it.' },
+      summary: { type: 'string', description: 'Replacement "what was done"; empty string clears it.' },
+      rationale: { type: 'string', description: 'Replacement "why it was done"; empty string clears it.' },
+      rejected: { type: 'string', description: 'Replacement "what was rejected"; empty string clears it.' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Replacement tags.' },
     },
     output: BOARD_OUTPUT,
@@ -330,12 +494,18 @@ export function apply(ctx: Context): void {
       const patch: {
         title?: string
         description?: string
+        summary?: string
+        rationale?: string
+        rejected?: string
         status?: BoardStatus
         tags?: string[]
       } = {}
       if (args.status !== undefined) patch.status = args.status as BoardStatus
       if (args.title !== undefined) patch.title = args.title
       if (args.description !== undefined) patch.description = args.description
+      if (args.summary !== undefined) patch.summary = args.summary
+      if (args.rationale !== undefined) patch.rationale = args.rationale
+      if (args.rejected !== undefined) patch.rejected = args.rejected
       if (args.tags !== undefined) patch.tags = args.tags
       return updateCard(cwd, args.id, patch).then(toBoardValue)
     },
@@ -361,6 +531,89 @@ export function apply(ctx: Context): void {
       return removeCard(cwd, args.id).then(toBoardValue)
     },
     presentCall: args => present('Remove kanban card', 'other', (args as { id: string }).id),
+  }))
+
+  // Agent Notes: complete replication of the DSH repository discipline.
+  ctx.tools.register(defineTool({
+    name: 'note_add',
+    description: 'Write an Agent Note documenting a NON-TRIVIAL change, at '
+      + '.agents/notes/implemented/<class>/<date>-<topic>.md (mirrors the DeepSeek Harness '
+      + 'repository discipline). A change is non-trivial when it changes behavior, '
+      + 'architecture, cross-file/cross-package conventions, process or tooling, test '
+      + 'strategy, storage/wire/config format, or makes a decision a maintainer could '
+      + 'reasonably revisit. Call this AFTER completing such a change, alongside any board '
+      + 'cards — the note records the why and what was rejected that the code cannot.',
+    parameters: {
+      class: {
+        type: 'string',
+        required: true,
+        enum: NOTE_CLASSES,
+        description: 'Note class: feature | bug-fix | simplification | architecture | process | testing.',
+      },
+      topic: {
+        type: 'string',
+        required: true,
+        description: 'Short kebab-case topic (e.g. "web-kanban-plugin").',
+      },
+      problem: {
+        type: 'string',
+        required: true,
+        description: 'The problem being solved (one short paragraph).',
+      },
+      decision: {
+        type: 'string',
+        required: true,
+        description: 'The decision made (what was done and why; a few paragraphs).',
+      },
+      alternatives: {
+        type: 'string',
+        description: 'Optional: what alternatives were rejected and why.',
+      },
+      consequences: {
+        type: 'string',
+        description: 'Optional: consequences and effects of the decision.',
+      },
+    },
+    output: NOTE_OUTPUT,
+    execute(args, exec) {
+      const cwd = workspaceOf(exec.agent?.session.header.cwd)
+      return writeAgentNote(cwd, args.class, args.topic, {
+        problem: args.problem,
+        decision: args.decision,
+        ...args.alternatives === undefined ? {} : { alternatives: args.alternatives },
+        ...args.consequences === undefined ? {} : { consequences: args.consequences },
+      }).then(path => ({ path, noteClass: args.class, topic: args.topic }))
+    },
+    presentCall: args => present('Write Agent Note', 'other', (args as { topic: string }).topic),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'note_list',
+    description: 'List existing Agent Notes under the current workspace (.agents/notes/implemented/**). '
+      + 'Use it before note_add to avoid duplicating a note that already covers the decision.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          notes: { type: 'array', required: true, items: { type: 'string' } },
+        },
+      } as const,
+      render: (_args: unknown, value: { notes: string[] }) => [
+        {
+          type: 'text' as const,
+          text: value.notes.length === 0
+            ? 'No Agent Notes yet.'
+            : ['Agent Notes:', ...value.notes].join('\n'),
+        },
+      ],
+    },
+    execute(_args, exec) {
+      const cwd = workspaceOf(exec.agent?.session.header.cwd)
+      return listAgentNotes(cwd).then(notes => ({ notes }))
+    },
+    presentCall: () => present('List Agent Notes', 'read'),
   }))
 
   registerWebApi(ctx)
@@ -401,6 +654,9 @@ async function applyMutation(cwd: string, body: {
   id?: string
   title?: string
   description?: string
+  summary?: string
+  rationale?: string
+  rejected?: string
   status?: BoardStatus
   tags?: string[]
 }): Promise<BoardView> {
@@ -409,14 +665,28 @@ async function applyMutation(cwd: string, body: {
       return await addCard(cwd, {
         title: body.title ?? '',
         ...body.description === undefined ? {} : { description: body.description },
+        ...body.summary === undefined ? {} : { summary: body.summary },
+        ...body.rationale === undefined ? {} : { rationale: body.rationale },
+        ...body.rejected === undefined ? {} : { rejected: body.rejected },
         ...body.status === undefined ? {} : { status: body.status },
         ...body.tags === undefined ? {} : { tags: body.tags },
       })
     case 'update': {
       if (body.id === undefined) throw new TypeError('kanban: update requires id')
-      const patch: { title?: string; description?: string; status?: BoardStatus; tags?: string[] } = {}
+      const patch: {
+        title?: string
+        description?: string
+        summary?: string
+        rationale?: string
+        rejected?: string
+        status?: BoardStatus
+        tags?: string[]
+      } = {}
       if (body.title !== undefined) patch.title = body.title
       if (body.description !== undefined) patch.description = body.description
+      if (body.summary !== undefined) patch.summary = body.summary
+      if (body.rationale !== undefined) patch.rationale = body.rationale
+      if (body.rejected !== undefined) patch.rejected = body.rejected
       if (body.status !== undefined) patch.status = body.status
       if (body.tags !== undefined) patch.tags = body.tags
       return await updateCard(cwd, body.id, patch)
@@ -465,6 +735,86 @@ function registerWebApi(ctx: Context): void {
     },
   })
 
+  // Spec read/write: the Web page's "Agent Note spec" settings inputs.
+  server.register({
+    kind: 'prefix',
+    path: '/kanban/spec',
+    handler: (req, res) => {
+      void handleSpec(req, res).catch(error => {
+        if (!res.writableEnded) {
+          sendJson(res, 500, {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      })
+    },
+  })
+
+  async function handleSpec(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const method = req.method ?? 'GET'
+    if (method === 'GET') {
+      const url = new URL(req.url ?? '/', 'http://localhost')
+      const cwd = url.searchParams.get('cwd')
+      if (cwd === null || cwd === '') {
+        sendJson(res, 400, { ok: false, error: 'kanban: GET /kanban/spec requires a cwd query parameter' })
+        return
+      }
+      const spec = await effectiveNoteSpec(cwd)
+      sendJson(res, 200, {
+        ok: true,
+        specVersion: spec.specVersion,
+        pluginSpecVersion: NOTE_SPEC_VERSION,
+        noteClasses: spec.noteClasses,
+        noteFormat: spec.noteFormat,
+        nonTrivialDefinition: spec.nonTrivialDefinition,
+        hasOverrides: spec.hasOverrides,
+        overridesPath: noteOverridesPath(cwd),
+      })
+      return
+    }
+    if (method === 'POST') {
+      const raw = await readBody(req)
+      let body: {
+        cwd?: string
+        noteClasses?: string[]
+        noteFormat?: string
+        nonTrivialDefinition?: string
+        acknowledgeSpecVersion?: number
+      }
+      try {
+        body = JSON.parse(raw) as typeof body
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: `kanban: invalid JSON body: ${(error as Error).message}` })
+        return
+      }
+      if (typeof body.cwd !== 'string' || body.cwd === '') {
+        sendJson(res, 400, { ok: false, error: 'kanban: POST /kanban/spec requires body.cwd' })
+        return
+      }
+      const overrides: NoteSpecOverrides = {
+        ...body.noteClasses !== undefined ? { noteClasses: body.noteClasses } : {},
+        ...body.noteFormat !== undefined ? { noteFormat: body.noteFormat } : {},
+        ...body.nonTrivialDefinition !== undefined ? { nonTrivialDefinition: body.nonTrivialDefinition } : {},
+        ...body.acknowledgeSpecVersion !== undefined ? { specVersion: body.acknowledgeSpecVersion } : {},
+      }
+      await writeNoteOverrides(body.cwd, overrides)
+      const spec = await effectiveNoteSpec(body.cwd)
+      sendJson(res, 200, {
+        ok: true,
+        specVersion: spec.specVersion,
+        pluginSpecVersion: NOTE_SPEC_VERSION,
+        noteClasses: spec.noteClasses,
+        noteFormat: spec.noteFormat,
+        nonTrivialDefinition: spec.nonTrivialDefinition,
+        hasOverrides: spec.hasOverrides,
+        overridesPath: noteOverridesPath(body.cwd),
+      })
+      return
+    }
+    sendJson(res, 405, { ok: false, error: `kanban: method ${method} not allowed` })
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const method = req.method ?? 'GET'
     if (method === 'GET') {
@@ -485,6 +835,9 @@ function registerWebApi(ctx: Context): void {
         id?: string
         title?: string
         description?: string
+        summary?: string
+        rationale?: string
+        rejected?: string
         status?: BoardStatus
         tags?: string[]
       }

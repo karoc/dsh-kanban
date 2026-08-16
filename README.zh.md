@@ -34,11 +34,30 @@
 | 工具 | 作用 |
 |---|---|
 | `board_list` | 读取当前工作区的看板（全部卡片 + 状态 + 标签 + 时间戳）。任何更新前先读它拿真实 id。 |
-| `board_add` | 新增一张卡片（title 必填，可带 description / status / tags）。 |
-| `board_update` | 更新卡片（按 id，可改 status / title / description / tags）。 |
+| `board_add` | 新增一张卡片（title 必填，可带 summary/做了什么、rationale/为什么、rejected/放弃了什么、description、status、tags）。 |
+| `board_update` | 更新卡片（按 id，可改 status / title / summary / rationale / rejected / description / tags）。 |
 | `board_remove` | 删除卡片（按 id）。 |
+| `note_add` | 写一份 Agent Note（完整复刻 DSH 仓库纪律），存到 `.agents/notes/implemented/<class>/<date>-<topic>.md`。 |
+| `note_list` | 列出当前工作区已有的 Agent Notes。 |
 
 工具以**当前会话的工作目录（cwd）**为看板归属：同一个项目目录下所有会话共享同一份 `KANBAN.json`，这就是"跨会话、跨分支不丢"的关键。
+
+### Agent Note 规范（可编辑，避免重复造轮子 + 可同步）
+
+`note_add` 产出的格式、分类、"非平凡变更"定义**复刻自 deepseek-harness 仓库**（不重复发明轮子）：
+
+| 项 | 上游来源 |
+|---|---|
+| 笔记分类 | `scripts/agent-note-tree.ts` → `AGENT_NOTE_CLASSES` |
+| 笔记格式 | `scripts/verify-agent-note-format.ts` |
+| 非平凡变更定义 | 根 `AGENTS.md`（"Non-trivial changes MUST include an Agent Note…"） |
+
+- **插件自带默认**（随版本更新）：`src/note-spec.ts` 固化默认分类、格式模板、非平凡定义，发布后开箱即用；
+- **用户可覆盖**：Web 看板页的「Agent Note spec」区提供**三个输入框**，可粘贴 dsh 上游最新内容替换默认；覆盖存工作区 `.agents/notes/overrides.json`；
+- **来源指引**：每个输入框下方明确标注对应 dsh 源码文件，用户知道去哪复制最新内容；
+- **更新警告**：插件升级后若工作区有自定义覆盖且规范版本落后，页面明确提示"更新插件会把覆盖重置为插件默认，你自定义的内容会丢失"。用户可「保存覆盖」更新 acknowledgeSpecVersion，或「恢复默认」清空覆盖。
+
+> 为何不能直接 import dsh：`verify-agent-note-format.ts` 是 dsh 仓库内脚本，不发布、不可安装、外部插件无法引用；规范只能以常量形式固化，靠"输入框覆盖 + 版本升级"同步。
 
 ### `/kanban` 命令
 

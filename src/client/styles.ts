@@ -9,7 +9,45 @@
  * DSH look.
  */
 export const KANBAN_STYLES = `
-.kb-sidebar-btn { width: 100%; }
+/* Sidebar footer trigger, mirroring the Settings trigger (34px compact row,
+   12px radius, 10px left pad, icon + left-aligned label). */
+.kb-sidebar-trigger {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% + 8px);
+  height: 34px;
+  margin: 4px -4px 4px;
+  padding: 6px 2px 6px 10px;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 22px;
+}
+.kb-sidebar-trigger:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+/* Rail trigger: the same 36x36 circle box as the other rail controls. */
+.kb-sidebar-trigger-rail {
+  width: 36px;
+  height: 36px;
+  margin: 8px 0 10px;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  border-radius: 50%;
+}
+.kb-sidebar-trigger-label {
+  overflow: hidden;
+  white-space: nowrap;
+}
 .kb-overlay {
   position: fixed; inset: 0; z-index: 50;
   display: flex; flex-direction: column;
@@ -60,6 +98,9 @@ export const KANBAN_STYLES = `
 }
 .kb-card-title { margin: 0; font-size: 13px; line-height: 18px; word-break: break-word; }
 .kb-card-desc { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); word-break: break-word; }
+.kb-card-fields { display: flex; flex-direction: column; gap: 4px; }
+.kb-card-field { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); word-break: break-word; }
+.kb-card-field-label { color: var(--dsw-alias-label-tertiary); font-weight: 600; }
 .kb-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .kb-card-actions { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
 .kb-composer-field { flex: 1; min-width: 0; }
@@ -70,6 +111,38 @@ export const KANBAN_STYLES = `
   background: var(--dsw-alias-bg-module-platform);
 }
 .kb-composer-row { display: flex; gap: 8px; align-items: center; }
+.kb-spec {
+  margin-top: 16px;
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px;
+  background: var(--dsw-alias-bg-module-platform);
+}
+.kb-spec-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 10px 12px; border: none; background: transparent;
+  color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; line-height: 18px; cursor: pointer;
+}
+.kb-spec-toggle:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.kb-spec-active { color: var(--dsw-alias-button-primary-fill); font-size: 12px; }
+.kb-spec-body { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-top: 1px solid var(--dsw-alias-border-l2); }
+.kb-spec-intro { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+.kb-spec-warning {
+  margin: 0; padding: 8px 10px; font-size: 12px; line-height: 18px;
+  color: var(--dsw-alias-interactive-bg-hover-danger);
+  border: 1px solid var(--dsw-alias-border-l3); border-radius: 8px;
+  background: var(--dsw-alias-bg-module);
+}
+.kb-spec-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
+.kb-spec-input {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;
+  padding: 8px 10px; background: var(--dsw-alias-bg-input, transparent);
+  color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; line-height: 18px;
+}
+.kb-spec-input:focus { outline: none; border-color: var(--dsw-alias-border-l3); }
+.kb-spec-monospace { font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, monospace); font-size: 12px; }
+.kb-spec-source { font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-tertiary); word-break: break-word; }
+.kb-spec-saved { margin: 0; font-size: 12px; color: var(--dsw-alias-button-primary-fill); }
+.kb-spec-actions { display: flex; gap: 8px; }
 .kb-loading, .kb-empty, .kb-error {
   padding: 24px; text-align: center; font-size: 13px; line-height: 20px;
   color: var(--dsw-alias-label-tertiary);
