@@ -142,11 +142,16 @@ pnpm bundle    # 产出 lib/index.js + lib/client.js
 ## 验证
 
 ```sh
-pnpm test     # 14 个 KANBAN.json 领域单测 + Host 工具注册/执行冒烟
-pnpm verify   # 4 个 board 工具注册 + board_add 端到端落盘
-pnpm accept   # 对运行中的 dsh web (http://127.0.0.1:3080) 做 GUI 验收：
-              #   侧边栏入口 → 全屏三列页 → 新增/移动/删除
+pnpm test       # tsc --noEmit 类型检查 + 14 个 KANBAN.json 领域单测 + Host 工具冒烟
+pnpm typecheck  # 仅类型检查（tsc --noEmit）
+pnpm verify     # 4 个 board 工具注册 + board_add 端到端落盘
+pnpm accept     # 对运行中的 dsh web (http://127.0.0.1:3080) 做 GUI 验收：
+                #   侧边栏入口（原生 DSH 按钮）→ 全屏三列页（不透明背景）→ 新增/移动/删除
 ```
+
+外部插件默认不做编译期类型检查（tsdown 只转译）；`tsc --noEmit` 在 `pnpm test`
+里兜底，避免"用未导入的组件/图标导致运行时崩溃"这类问题（曾因漏导入
+`IconCheckOutline16` 使看板页整体崩溃）。
 
 `scripts/verify-model-board.mjs` 额外验证**真实模型调用**：向 GUI 会话发一条让模型用
 `board_add`/`board_list` 的指令，确认卡片写入会话 cwd 的 `KANBAN.json`、并能在看板页读到

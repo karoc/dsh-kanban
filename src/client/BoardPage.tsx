@@ -52,6 +52,9 @@ export interface BoardMutationBody {
   tags?: string[]
 }
 
+/** One mutation without the workspace root; `cwd` is added at send time. */
+export type BoardMutation = Omit<BoardMutationBody, 'cwd'>
+
 /** Injected api face of the board page (over fetch /kanban/api). */
 export interface BoardApi {
   /** GET the board for a workspace. */
@@ -126,7 +129,7 @@ export function BoardPage({ api, workspace, onClose, t }: BoardPageProps) {
     void refresh()
   }, [refresh])
 
-  const applyMutation = useCallback(async (body: BoardMutationBody): Promise<void> => {
+  const applyMutation = useCallback(async (body: BoardMutation): Promise<void> => {
     if (cwd === undefined) return
     setError(undefined)
     try {

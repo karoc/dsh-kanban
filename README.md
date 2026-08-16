@@ -132,11 +132,18 @@ pnpm bundle    # emits lib/index.js + lib/client.js
 ## Verification
 
 ```sh
-pnpm test     # 14 KANBAN.json domain unit tests + host tool registration/exec smoke
-pnpm verify   # 4 board tools registered + board_add persisted end-to-end
-pnpm accept   # GUI acceptance against a running dsh web (http://127.0.0.1:3080):
-              #   sidebar entry → full-screen three-column page → add / move / delete
+pnpm test       # tsc --noEmit typecheck + 14 KANBAN.json domain unit tests + host tool smoke
+pnpm typecheck  # typecheck only (tsc --noEmit)
+pnpm verify     # 4 board tools registered + board_add persisted end-to-end
+pnpm accept     # GUI acceptance against a running dsh web (http://127.0.0.1:3080):
+                #   native-DSH sidebar entry → opaque full-screen three-column page
+                #   → add / move / delete
 ```
+
+External plugins get no compile-time typechecking by default (tsdown only
+transpiles); `tsc --noEmit` in `pnpm test` catches "used-but-not-imported"
+mistakes that would otherwise crash at runtime (a missing `IconCheckOutline16`
+import once took down the whole board page).
 
 `scripts/verify-model-board.mjs` additionally verifies a **real model call**: it sends
 the GUI agent an instruction to use `board_add`/`board_list`, then confirms the card

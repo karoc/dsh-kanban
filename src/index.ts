@@ -40,6 +40,41 @@ export const inject = ['tools', 'webServer']
 
 const STATUSES = ['todo', 'in_progress', 'done'] as const
 
+/** One card as returned by a tool (matches the output schema exactly). */
+export interface BoardToolCard {
+  id: string
+  title: string
+  description?: string
+  status: 'todo' | 'in_progress' | 'done'
+  tags: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+/** The canonical tool output: the full fresh board view (mutable cards). */
+export interface BoardToolValue {
+  path: string
+  cards: BoardToolCard[]
+  counts: { todo: number; inProgress: number; done: number }
+}
+
+/** Build a {@link BoardToolValue} from a {@link BoardView}. */
+function toBoardValue(view: BoardView): BoardToolValue {
+  return {
+    path: view.path,
+    cards: view.cards.map(card => ({
+      id: card.id,
+      title: card.title,
+      ...card.description === undefined ? {} : { description: card.description },
+      status: card.status,
+      tags: card.tags,
+      createdAt: card.createdAt,
+      updatedAt: card.updatedAt,
+    })),
+    counts: view.counts,
+  }
+}
+
 /** Canonical board output shared by every tool: the full fresh board view. */
 const BOARD_OUTPUT = {
   schema: {
@@ -75,8 +110,8 @@ const BOARD_OUTPUT = {
         },
       },
     },
-  },
-  render: (_args: unknown, value: BoardView) => [
+  } as const,
+  render: (_args: unknown, value: BoardToolValue) => [
     {
       type: 'text' as const,
       text: [
@@ -114,7 +149,15 @@ export function apply(ctx: Context): void {
       const cwd = workspaceOf(exec.agent?.session.header.cwd)
       return readBoard(cwd).then(board => ({
         path: `${cwd}/KANBAN.json`,
-        cards: board.cards,
+        cards: board.cards.map(card => ({
+          id: card.id,
+          title: card.title,
+          ...card.description === undefined ? {} : { description: card.description },
+          status: card.status,
+          tags: card.tags,
+          createdAt: card.createdAt,
+          updatedAt: card.updatedAt,
+        })),
         counts: {
           todo: board.cards.filter(c => c.status === 'todo').length,
           inProgress: board.cards.filter(c => c.status === 'in_progress').length,
@@ -158,7 +201,7 @@ export function apply(ctx: Context): void {
         ...args.description === undefined ? {} : { description: args.description },
         ...args.status === undefined ? {} : { status: args.status as BoardStatus },
         ...args.tags === undefined ? {} : { tags: args.tags },
-      }).then(view => view)
+      }).then(toBoardValue)
     },
     presentCall: args => present('Add kanban card', 'other', (args as { title: string }).title),
   }))
@@ -196,7 +239,7 @@ export function apply(ctx: Context): void {
       if (args.title !== undefined) patch.title = args.title
       if (args.description !== undefined) patch.description = args.description
       if (args.tags !== undefined) patch.tags = args.tags
-      return updateCard(cwd, args.id, patch).then(view => view)
+      return updateCard(cwd, args.id, patch).then(toBoardValue)
     },
     presentCall: args => present(
       'Update kanban card',
@@ -217,7 +260,7 @@ export function apply(ctx: Context): void {
     output: BOARD_OUTPUT,
     execute(args, exec) {
       const cwd = workspaceOf(exec.agent?.session.header.cwd)
-      return removeCard(cwd, args.id).then(view => view)
+      return removeCard(cwd, args.id).then(toBoardValue)
     },
     presentCall: args => present('Remove kanban card', 'other', (args as { id: string }).id),
   }))
