@@ -17,7 +17,26 @@ The same `KANBAN.json` is shared by the model tools and the Web page, so **what 
 
 ## What it adds
 
-### Model tools (host half)
+### Proactive model maintenance (host half, the core)
+
+A **system-prompt guidance section** tells the model to actually use the board on
+its own — record plans/todos as they appear, move cards as work progresses,
+without waiting to be asked:
+
+- When the user states a multi-step plan or task list → the model `board_add`s
+  one card per step;
+- As work progresses → the model `board_update`s cards to `in_progress` / `done`;
+- Switching branches or opening a new session → the model `board_list`s first to
+  pick up the durable record;
+- Division of labor vs `todo_write`: `todo_write` is the transient in-turn task
+  list; the board is the durable cross-session record — anything the user should
+  still see after switching branches belongs on the board.
+
+> Verified with a real model (user only said "build a Markdown-to-HTML tool and
+> make a plan", no mention of the board): the model proactively `board_list`'d,
+> `board_add`'d all 7 plan steps, then `board_update`'d each to done as it went.
+
+### Model tools
 
 | Tool | Purpose |
 |---|---|
@@ -27,6 +46,10 @@ The same `KANBAN.json` is shared by the model tools and the Web page, so **what 
 | `board_remove` | Remove a card by id. |
 
 The board is scoped to the **current session's working directory (cwd)**: every session under the same project directory shares one `KANBAN.json` — that's what makes it survive across sessions and branches.
+
+### `/kanban` command
+
+`/kanban` shows the current workspace board; `/kanban done <card-id>` marks a card done quickly.
 
 ### Web board page (client half)
 

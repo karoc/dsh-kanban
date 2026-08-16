@@ -19,11 +19,17 @@
  *
  * The Web page and the model tools share one domain (`./board-core.ts`), so
  * whatever the model writes the page sees, and vice versa.
+ *
+ * To make the model actually USE the board, this host half also:
+ *   - registers a system-prompt guidance section telling it when to record,
+ *     move, and close cards (and how this differs from todo_write);
+ *   - registers a `/kanban` command for the human to view/maintain the board.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { URL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
+import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView } from '@deepseek-ai/dsh-tools'
 import {
@@ -36,7 +42,7 @@ import {
 } from './board-core.ts'
 
 export const name = 'dsh-kanban'
-export const inject = ['tools', 'webServer']
+export const inject = ['tools', 'webServer', 'systemPrompt', 'commands']
 
 const STATUSES = ['todo', 'in_progress', 'done'] as const
 
@@ -136,8 +142,99 @@ function present(title: string, kind: 'read' | 'other', rawInput?: unknown): Gen
   return { card: 'generic', title, kind, ...rawInput === undefined ? {} : { rawInput } }
 }
 
+/**
+ * The system-prompt guidance that tells the model to actually USE the board.
+ * This is what makes it an active maintenance habit instead of a passive tool:
+ * record plans as they appear, move cards as work progresses, close them when
+ * done — across sessions, so switching branches never loses the thread.
+ */
+const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) backed by '
+  + 'KANBAN.json at the workspace root — it survives session switches and branches, and it '
+  + 'is shared with the Web "看板" page. Use it to track plans and todos that should outlive '
+  + 'the current turn: when the user states a multi-step plan or a list of tasks, record each '
+  + 'step with board_add (title; status todo; tags for grouping). As work progresses, move '
+  + 'cards with board_update (status in_progress → done); when a card is finished or '
+  + 'superseded, mark it done or remove it. Prefer the board over todo_write for anything the '
+  + 'user should still see after switching branches or opening a new session: todo_write is '
+  + 'the transient in-turn task list, while the board is the durable cross-session record. '
+  + 'Check board_list when resuming work in a workspace to pick up what was planned before.'
+
+/** Execute the human `/kanban` command against the receiving agent's workspace. */
+async function executeBoardCommand(ctx: Context, invocation: CommandInvocation): Promise<CommandResult> {
+  const agent = invocation.agent
+  const cwd = agent?.session.header.cwd
+  if (cwd === undefined || cwd === '') {
+    return { kind: 'error', text: 'kanban: no workspace — this session has no cwd' }
+  }
+  const input = invocation.rawInput.trim()
+  const done = async (id: string): Promise<CommandResult> => {
+    try {
+      const view = await updateCard(cwd, id, { status: 'done' })
+      return renderBoardResult('Marked done.', view)
+    } catch (error) {
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
+    }
+  }
+  const run = async (): Promise<CommandResult> => {
+    if (input === '' || input === 'list') {
+      try {
+        const board = await readBoard(cwd)
+        return renderBoardResult(undefined, {
+          path: `${cwd}/KANBAN.json`,
+          cards: board.cards,
+          counts: {
+            todo: board.cards.filter(c => c.status === 'todo').length,
+            inProgress: board.cards.filter(c => c.status === 'in_progress').length,
+            done: board.cards.filter(c => c.status === 'done').length,
+          },
+        })
+      } catch (error) {
+        return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
+      }
+    }
+    if (input.startsWith('done ')) {
+      const id = input.slice(5).trim()
+      if (id === '') return { kind: 'error', text: 'Usage: /kanban done <card-id>' }
+      return await done(id)
+    }
+    return { kind: 'error', text: 'Usage: /kanban [list|done <card-id>]' }
+  }
+  return run()
+}
+
+/** Render a board document as a `/kanban` command result. */
+function renderBoardResult(heading: string | undefined, view: BoardView): CommandResult {
+  const lines = [
+    ...heading !== undefined ? [heading] : [],
+    `Board at ${view.path}`,
+    ...view.cards.map(card =>
+      `- [${card.status}] ${card.title}${card.tags.length > 0 ? ` ${card.tags.map(t => `#${t}`).join(' ')}` : ''}`),
+    ...view.cards.length === 0 ? ['(no cards yet)'] : [],
+  ]
+  return { kind: 'success', text: lines.join('\n') }
+}
+
+/** Register the `/kanban` command (view + quick done). */
+function registerBoardCommand(ctx: Context): void {
+  ctx.commands.register({
+    name: 'kanban',
+    description: 'view or update the workspace kanban board',
+    input: { hint: '[list|done <card-id>]' },
+    handler: invocation => executeBoardCommand(ctx, invocation),
+  })
+}
+
 /** Register the four model-facing board tools. */
 export function apply(ctx: Context): void {
+  // Tell the model when/why to use the board (tool-guidance range 100-199).
+  ctx.systemPrompt.section({
+    name: 'tool:board',
+    order: 113,
+    text: BOARD_GUIDANCE,
+  })
+  // Human-facing `/kanban` command.
+  registerBoardCommand(ctx)
+
   ctx.tools.register(defineTool({
     name: 'board_list',
     description: 'Read the current workspace kanban board (all cards with their status, tags, and timestamps). '
@@ -171,7 +268,8 @@ export function apply(ctx: Context): void {
   ctx.tools.register(defineTool({
     name: 'board_add',
     description: 'Add a card to the current workspace kanban board. Use it to persist a plan step or todo so it '
-      + 'survives session switches and shows up on the Web board page. The board lives at KANBAN.json in the workspace root.',
+      + 'survives session switches and shows up on the Web board page. When the user states a multi-step plan or a '
+      + 'list of tasks, record each concrete step here. The board lives at KANBAN.json in the workspace root.',
     parameters: {
       title: {
         type: 'string',
