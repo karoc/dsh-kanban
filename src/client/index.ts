@@ -1,0 +1,132 @@
+/**
+ * Kanban board plugin, browser half (external bundle, not part of the DSH
+ * repository). Registers a sidebar footer action ("看板") that opens a
+ * full-screen three-column board page backed by the host webServer route
+ * (GET/POST /kanban/api, served by this bundle's host half).
+ *
+ * The page resolves its workspace from the current session's cwd (falling
+ * back to the most recent workspace path), so the KANBAN.json it reads is the
+ * same file the model tools (board_list/board_add/board_update/board_remove)
+ * write — cross-session by construction.
+ */
+
+import { useSyncExternalStore } from 'react'
+import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+// Type-only: pulls the shell's SlotMap merges (the 'sidebar.footer.action' and
+// 'shell.overlay' entries) into this program.
+import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+// Type-only: pulls the locale plugin's Context merge (ctx.locale).
+import type {} from '@deepseek-ai/dsh-client-locale/client'
+import { BoardPage, type BoardApi, type BoardViewPayload, type BoardWorkspace } from './BoardPage.tsx'
+import { closeBoard, openBoard } from './board-state.ts'
+import { KanbanOverlay, SidebarKanbanButton, type BoardOverlayInjected } from './KanbanSurface.tsx'
+import { en, zh, type BoardKey } from './locales.ts'
+// Side-effect import: injects the design-token styles at module evaluation.
+import './styles.ts'
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    /** The kanban board page copy. */
+    'dsh-kanban': BoardKey
+  }
+}
+
+/** Dictionary namespace owned by this plugin. */
+const NS = 'dsh-kanban'
+
+/** Required services (cordis fiber inject). */
+export const inject = ['slots', 'locale', 'sessions', 'workspaces']
+
+/** Resolve a workspace for the board from the session/workspace seats. */
+function resolveWorkspace(
+  sessionList: { byId?: Record<string, { cwd?: string }>; current?: string },
+  workspaceList: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string },
+): BoardWorkspace | undefined {
+  const current = sessionList.current
+  if (current !== undefined) {
+    const cwd = sessionList.byId?.[current]?.cwd
+    if (cwd !== undefined && cwd !== '') {
+      const base = cwd.replace(/[/\\]+$/, '').split(/[/\\]/).pop() ?? cwd
+      return { cwd, title: base }
+    }
+  }
+  const items = workspaceList.items ?? []
+  const recentId = workspaceList.recentWorkspaceId
+  const workspace = items.find(item => item.workspaceId === recentId) ?? items[0]
+  if (workspace !== undefined) {
+    return { cwd: workspace.path, title: workspace.title ?? workspace.path }
+  }
+  return undefined
+}
+
+/** Build the fetch-backed board api bound to this origin. */
+function createBoardApi(): BoardApi {
+  const endpoint = '/kanban/api'
+  const get = async (cwd: string): Promise<BoardViewPayload> => {
+    const response = await fetch(`${endpoint}?cwd=${encodeURIComponent(cwd)}`)
+    const body = await response.json() as { ok: boolean; error?: string } & Partial<BoardViewPayload>
+    if (!response.ok || body.ok !== true || body.cards === undefined) {
+      throw new Error(body.error ?? `kanban: GET failed with ${response.status}`)
+    }
+    return { path: body.path as string, cards: body.cards, counts: body.counts as BoardViewPayload['counts'] }
+  }
+  const mutate = async (payload: { cwd: string; op: 'add' | 'update' | 'remove'; id?: string; title?: string; description?: string; status?: string; tags?: string[] }): Promise<BoardViewPayload> => {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const body = await response.json() as { ok: boolean; error?: string } & Partial<BoardViewPayload>
+    if (!response.ok || body.ok !== true || body.cards === undefined) {
+      throw new Error(body.error ?? `kanban: POST failed with ${response.status}`)
+    }
+    return { path: body.path as string, cards: body.cards, counts: body.counts as BoardViewPayload['counts'] }
+  }
+  return { get, mutate }
+}
+
+/**
+ * Browser plugin body: registers the sidebar entry and the full-screen page.
+ * @param ctx - client root context.
+ */
+export function apply(ctx: ClientContext): void {
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-kanban: copy dictionaries')
+
+  const api = createBoardApi()
+  const t = ctx.locale.bind(NS) as (key: BoardKey) => string
+
+  // Sidebar footer action: the "看板" entry that opens the page.
+  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+    name: 'sidebar.footer.action',
+    id: 'kanban',
+    order: 10,
+    locale: NS,
+    inject: () => ({
+      onClick: openBoard,
+      t: () => t('nav'),
+    }),
+  }, SidebarKanbanButton))
+
+  // Full-screen overlay: the board page while open, null otherwise.
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: 'kanban',
+    order: 10,
+    locale: NS,
+    inject: (): BoardOverlayInjected => {
+      const sessions = ctx.get('sessions') as { list: { getSnapshot: () => { byId?: Record<string, { cwd?: string }>; current?: string } } } | undefined
+      const workspaces = ctx.get('workspaces') as { list: { getSnapshot: () => { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string } } } | undefined
+      return {
+        api,
+        workspace: resolveWorkspace(
+          sessions?.list.getSnapshot() ?? {},
+          workspaces?.list.getSnapshot() ?? {},
+        ),
+        onClose: closeBoard,
+        t,
+      }
+    },
+  }, KanbanOverlay))
+}
+
