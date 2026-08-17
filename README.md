@@ -36,6 +36,34 @@ without waiting to be asked:
 > make a plan", no mention of the board): the model proactively `board_list`'d,
 > `board_add`'d all 7 plan steps, then `board_update`'d each to done as it went.
 
+### How it works & transparency
+
+**What makes the model "proactively" use the board?** Two mechanisms, both in
+dsh's **system prompt** and visible to the user:
+
+1. **Board usage guidance** (`ctx.systemPrompt.section`): a fixed guidance
+   section telling the model what the board is, when to record, and how it
+   differs from `todo_write`. Updated with plugin releases.
+2. **(planned) Session-start auto-injection** (`ctx.systemPrompt.context`): at
+   each new session, the plugin reads the current workspace's `KANBAN.json` and
+   **injects an "open items" summary** into the model's context — so the model
+   sees the board immediately, without having to remember to `board_list`.
+
+**Trade-offs of the auto-injection (stated openly):**
+
+| Aspect | Notes |
+|---|---|
+| ✅ Pro | The model **always sees** the current workspace's open items — no "remember to check"; cross-session continuity is guaranteed by the system, not the model's diligence |
+| ⚠️ Cost 1 | Every request carries the board summary, adding **fixed token overhead** (grows with the board) |
+| ⚠️ Cost 2 | Board changes **alter the request prefix**, which can affect **KV-cache reuse** (open item in [docs/usage-strategy.md](docs/usage-strategy.md)) |
+| ⚠️ Trade-off | "System pushes" vs "model queries" — injection guarantees visibility at the price of per-request overhead; with a very large board, consider injecting open items only |
+
+**Data-safety commitment**: the plugin **only writes** board/note files; there
+is no startup, scheduled, or install-time cleanup. Cards are removed only by an
+explicit `board_remove` / the Web delete button; excess done cards are
+**archived** (moved to `.agents/notes/archive.json`), never deleted. All data
+lives inside your **workspace directory** (git-trackable, hand-editable).
+
 ### Model tools
 
 | Tool | Purpose |
