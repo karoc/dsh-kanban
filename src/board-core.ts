@@ -11,6 +11,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join } from 'node:path'
 
@@ -103,6 +104,34 @@ export async function readBoard(cwd: string): Promise<BoardData> {
   let raw: string
   try {
     raw = await readFile(path, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return emptyBoard()
+    throw error
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    throw new Error(`kanban: ${path} is not valid JSON: ${(error as Error).message}`)
+  }
+  if (!isBoardData(parsed)) {
+    throw new Error(`kanban: ${path} does not match the KANBAN.json shape (expected { version: 1, cards: [...] })`)
+  }
+  return parsed
+}
+
+/**
+ * Synchronous read for prompt-assembly-time use (systemPrompt.context text is
+ * a sync `(context) => string`). Same semantics as {@link readBoard}: a missing
+ * file yields the empty board; a structurally invalid document throws.
+ * @param cwd - absolute workspace root.
+ * @returns the parsed board document.
+ */
+export function readBoardSync(cwd: string): BoardData {
+  const path = boardPath(cwd)
+  let raw: string
+  try {
+    raw = readFileSync(path, 'utf8')
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return emptyBoard()
     throw error

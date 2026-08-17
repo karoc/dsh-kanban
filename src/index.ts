@@ -32,11 +32,15 @@ import { basename, isAbsolute, join } from 'node:path'
 import { URL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+// Type-only: pulls dsh-agent's merge-extended AssembleContext (the `agent`
+// field on systemPrompt.context text callbacks) into this program.
+import type {} from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView } from '@deepseek-ai/dsh-tools'
 import {
   addCard,
   readBoard,
+  readBoardSync,
   removeCard,
   updateCard,
   type BoardStatus,
@@ -204,6 +208,36 @@ const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) b
   + `{${DEFAULT_NOTE_CLASSES.join(', ')}}; a short kebab-case `
   + 'topic; the problem being solved; the decision made; what alternatives were rejected and '
   + 'why; and consequences. Keep it a few paragraphs, not a full essay.'
+
+/**
+ * Session-start board snapshot injected into every assembly (systemPrompt
+ * context, sync — prompt assembly is synchronous). Reads the current agent's
+ * workspace KANBAN.json and reports the OPEN items (todo + in_progress) so the
+ * model sees the board without having to remember to board_list. Only open
+ * items are injected: done cards churn and would disturb the prompt prefix /
+ * KV-cache stability for no benefit. Returns '' (contributes nothing) when the
+ * session has no cwd or the board is empty. Swallows read/parse errors — a
+ * broken KANBAN.json must never crash prompt assembly (the tools/route still
+ * fail loud on their own paths).
+ */
+function boardSnapshotText(context: { agent?: { session: { header: { cwd?: string } } } | undefined }): string {
+  const cwd = context.agent?.session.header.cwd
+  if (cwd === undefined || cwd === '') return ''
+  let board
+  try {
+    board = readBoardSync(cwd)
+  } catch {
+    return ''
+  }
+  const open = board.cards.filter(card => card.status === 'todo' || card.status === 'in_progress')
+  if (open.length === 0) return ''
+  const lines = open.map(card => {
+    const tags = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''
+    const status = card.status === 'in_progress' ? ' (in progress)' : ''
+    return `- [${card.status}] ${card.title}${status}${tags}`
+  })
+  return 'Current workspace board (KANBAN.json) — open items:\n' + lines.join('\n')
+}
 
 /** Execute the human `/kanban` command against the receiving agent's workspace. */
 async function executeBoardCommand(ctx: Context, invocation: CommandInvocation): Promise<CommandResult> {
@@ -390,6 +424,14 @@ export function apply(ctx: Context): void {
     name: 'tool:board',
     order: 113,
     text: BOARD_GUIDANCE,
+  })
+  // Session-start board snapshot: inject the workspace's open items so the
+  // model sees the board on every assembly without remembering to board_list.
+  // Dynamic context (order 114) — sync text, open items only.
+  ctx.systemPrompt.context({
+    name: 'board:open-items',
+    order: 114,
+    text: boardSnapshotText,
   })
   // Human-facing `/kanban` command.
   registerBoardCommand(ctx)

@@ -12,11 +12,11 @@
 
 ## 方案（按价值排序）
 
-### A. 会话开始自动注入看板摘要（最大杠杆）
-- 用 `ctx.systemPrompt.context({ name, order, text })`，text 是 `(context) => string` 动态函数。
-- 按当前工作区读 KANBAN.json，注入"当前看板：未完成项摘要 + 计数"。
-- 效果：模型**一上来就知道**有什么待办，自然围绕它工作——从"模型记得用"变"系统主动给"。
-- 技术前提：context 的 text 函数里按 scope 拿 agent session cwd（需确认 AssembleContext.scope → agent → cwd 链路）。
+### A. 会话开始自动注入看板摘要（最大杠杆）—— ✅ 已实现（2026-08-17）
+- 用 `ctx.systemPrompt.context({ name: 'board:open-items', order: 114, text })`，text 是同步 `(context) => string`。
+- **技术前提已验证**：`AssembleContext.agent` 由 `@deepseek-ai/dsh-agent` 通过 `declare module` 扩展，每次装配 `assembleContextFor(agent)` 传入 `{ agent, scope: agent }`，text 里可拿 `agent.session.header.cwd`。
+- 实现：`boardSnapshotText()` 按 cwd 同步读 KANBAN.json（新增 `readBoardSync`），只注入**未完成项**（todo + in_progress），控制 token 开销并减少 prompt 前缀抖动；无会话/无 cwd/看板空/读失败 → 返回空串不贡献。
+- 验证：`scripts/verify-context.mjs`（注入开放项不含 done、无 agent/无 cwd 为空）。
 
 ### B. 关键节点半自动上板
 - systemPrompt 引导：收到多步骤任务→ board_add；每完成一步 → board_update；任务结束 → 收尾更新。

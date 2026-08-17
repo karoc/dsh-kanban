@@ -44,10 +44,12 @@ dsh's **system prompt** and visible to the user:
 1. **Board usage guidance** (`ctx.systemPrompt.section`): a fixed guidance
    section telling the model what the board is, when to record, and how it
    differs from `todo_write`. Updated with plugin releases.
-2. **(planned) Session-start auto-injection** (`ctx.systemPrompt.context`): at
-   each new session, the plugin reads the current workspace's `KANBAN.json` and
-   **injects an "open items" summary** into the model's context — so the model
-   sees the board immediately, without having to remember to `board_list`.
+2. **Session-start auto-injection** (`ctx.systemPrompt.context`): on every
+   prompt assembly, the plugin reads the current session's workspace
+   `KANBAN.json` and **injects an "open items" summary** (todo + in_progress)
+   into the model's context — so the model sees the board immediately, without
+   having to remember to `board_list`. With no session / no cwd / an empty
+   board it contributes nothing.
 
 **Trade-offs of the auto-injection (stated openly):**
 
