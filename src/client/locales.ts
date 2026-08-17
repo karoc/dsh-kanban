@@ -44,6 +44,10 @@ export const en = {
   sourceSession: 'Open source session',
   workspaceLabel: 'Workspace',
   workspaceChoose: 'Choose a workspace…',
+  deleteTitle: 'Delete card',
+  deleteConfirm: 'Delete "{title}"? This removes the card from KANBAN.json permanently. This cannot be undone.',
+  deleteCancel: 'Cancel',
+  deleteConfirmAction: 'Delete',
 }
 
 /** The board page copy key set. */
@@ -93,4 +97,8 @@ export const zh: { [Key in keyof typeof en]: string } = {
   sourceSession: '打开来源会话',
   workspaceLabel: '工作区',
   workspaceChoose: '选择工作区…',
+  deleteTitle: '删除卡片',
+  deleteConfirm: '确定删除「{title}」吗？这会把卡片从 KANBAN.json 永久移除，无法撤销。',
+  deleteCancel: '取消',
+  deleteConfirmAction: '删除',
 }

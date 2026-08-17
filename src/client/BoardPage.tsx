@@ -19,6 +19,7 @@ import {
   IconTrashOutline16,
   Input,
   Menu,
+  Modal,
   Pill,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { BoardKey } from './locales.ts'
@@ -534,6 +535,7 @@ function Card(props: {
 }) {
   const { card, t, onMove, onRemove, onOpenSession } = props
   const [statusOpen, setStatusOpen] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   // Menu renders its own check for selectedId — no per-item icon here, or the
   // selected row would show two checks.
   const statusItems = STATUSES.map(status => ({
@@ -603,9 +605,34 @@ function Card(props: {
           size="sm"
           icon={<IconTrashOutline16 />}
           aria-label={t('remove')}
-          onClick={() => onRemove(card.id)}
+          onClick={() => setConfirmDelete(true)}
         />
       </div>
+      <Modal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title={t('deleteTitle')}
+        closeLabel={t('deleteCancel')}
+        description={t('deleteConfirm', { title: card.title })}
+        footer={(
+          <>
+            <Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>
+              {t('deleteCancel')}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<IconTrashOutline16 />}
+              onClick={() => {
+                onRemove(card.id)
+                setConfirmDelete(false)
+              }}
+            >
+              {t('deleteConfirmAction')}
+            </Button>
+          </>
+        )}
+      />
     </article>
   )
 }
