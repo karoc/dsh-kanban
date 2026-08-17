@@ -503,6 +503,8 @@ function WorkspacePicker(props: {
         if (ws !== undefined) onSelect(ws)
       }}
       align="start"
+      // Portal so the list is not clipped by the board body's scroll container.
+      portal
       anchor={(
         <button
           type="button"
@@ -580,6 +582,10 @@ function Card(props: {
           selectedId={card.status}
           onSelect={(id) => { onMove(card.id, id as BoardCardView['status']); setStatusOpen(false) }}
           align="start"
+          // Portal: the card sits inside the scrolling column, so a plain
+          // bottom-anchored list would be clipped by the column's overflow.
+          // Portaling renders the list fixed over document.body instead.
+          portal
           anchor={(
             <Button
               variant="outline"
