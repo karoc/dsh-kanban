@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
   IconCheckOutline16,
+  IconChevronDownOutline14,
   IconCloseOutline16,
   IconPlusOutline16,
   IconRefreshOutline16,
@@ -490,32 +491,33 @@ function WorkspacePicker(props: {
     ...selected !== undefined && ws.workspaceId === selected.workspaceId ? { icon: <IconCheckOutline16 /> } : {},
   }))
   return (
-    <div className="kb-workspace-picker">
-      <span className="kb-workspace-label">{t('workspaceLabel')}:</span>
-      <Menu
-        open={open}
-        onClose={onToggle}
-        items={items}
-        selectedId={selected?.workspaceId}
-        onSelect={(id) => {
-          const ws = workspaces.find(w => w.workspaceId === id)
-          if (ws !== undefined) onSelect(ws)
-          onToggle()
-        }}
-        align="start"
-        anchor={(
-          <Button
-            variant="outline"
-            size="sm"
-            aria-haspopup="menu"
-            aria-expanded={open}
-            onClick={onToggle}
-          >
+    <Menu
+      open={open}
+      onClose={onToggle}
+      items={items}
+      selectedId={selected?.workspaceId}
+      onSelect={(id) => {
+        const ws = workspaces.find(w => w.workspaceId === id)
+        if (ws !== undefined) onSelect(ws)
+        onToggle()
+      }}
+      align="start"
+      anchor={(
+        <button
+          type="button"
+          className="kb-workspace-picker"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={onToggle}
+        >
+          <span className="kb-workspace-label">{t('workspaceLabel')}:</span>
+          <span className="kb-workspace-trigger">
             {selected?.title ?? t('workspaceChoose')}
-          </Button>
-        )}
-      />
-    </div>
+            <IconChevronDownOutline14 />
+          </span>
+        </button>
+      )}
+    />
   )
 }
 

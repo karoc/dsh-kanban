@@ -65,12 +65,29 @@ export const KANBAN_STYLES = `
 .kb-header-sub { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
 .kb-header-spacer { flex: 1; }
 .kb-body { flex: 1; overflow: auto; padding: 20px; }
-/* Workspace switcher strip at the top of the board body. */
+/* Workspace switcher strip at the top of the board body: a clearly clickable
+   grey capsule (hover darkens) so users can see it opens a menu. */
 .kb-workspace-picker {
-  display: flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center; gap: 8px;
   margin: 0 0 16px;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+  transition: background 120ms ease;
 }
+.kb-workspace-picker:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .kb-workspace-label { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+.kb-workspace-picker .kb-workspace-trigger {
+  font-size: 13px; line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.kb-workspace-trigger svg { flex: none; }
 .kb-board-path {
   margin: 0 0 16px; font-size: 12px; line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
