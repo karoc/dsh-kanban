@@ -65,6 +65,12 @@ export const KANBAN_STYLES = `
 .kb-header-sub { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
 .kb-header-spacer { flex: 1; }
 .kb-body { flex: 1; overflow: auto; padding: 20px; }
+/* Workspace switcher strip at the top of the board body. */
+.kb-workspace-picker {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 16px;
+}
+.kb-workspace-label { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
 .kb-board-path {
   margin: 0 0 16px; font-size: 12px; line-height: 18px;
   color: var(--dsw-alias-label-tertiary);

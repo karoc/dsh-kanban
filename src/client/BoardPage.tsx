@@ -96,6 +96,8 @@ export interface NoteSpecMutation {
 
 /** The resolved workspace for this board view. */
 export interface BoardWorkspace {
+  /** Stable workspace id (dsh WorkspaceId). */
+  workspaceId: string
   /** Absolute workspace root where KANBAN.json lives. */
   cwd: string
   /** Short display title (path basename). */
@@ -105,7 +107,10 @@ export interface BoardWorkspace {
 /** Props delivered by the slot outlet: the api + workspace resolve + copy. */
 export interface BoardPageProps {
   api: BoardApi
+  /** The initially selected workspace (current session's workspace, if any). */
   workspace: BoardWorkspace | undefined
+  /** Every workspace the user can switch the board to. */
+  workspaces: readonly BoardWorkspace[]
   onClose: () => void
   t: (key: BoardKey, params?: Record<string, string>) => string
   /** Jump to the session that created a card (locate the handling session). */
@@ -132,7 +137,7 @@ function statusLabel(status: BoardCardView['status'], t: BoardPageProps['t']): s
 }
 
 /** The board page component (rendered inside the shell.overlay seat). */
-export function BoardPage({ api, workspace, onClose, t, openSession }: BoardPageProps) {
+export function BoardPage({ api, workspace, workspaces, onClose, t, openSession }: BoardPageProps) {
   const [cards, setCards] = useState<BoardCardView[]>([])
   const [path, setPath] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(true)
@@ -142,8 +147,12 @@ export function BoardPage({ api, workspace, onClose, t, openSession }: BoardPage
   const [draftRationale, setDraftRationale] = useState('')
   const [draftRejected, setDraftRejected] = useState('')
   const [archivedNotice, setArchivedNotice] = useState<{ count: number; path: string } | undefined>(undefined)
+  const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false)
+  // The selected workspace: starts at the current session's workspace, and the
+  // user can switch to any registered workspace.
+  const [selectedWorkspace, setSelectedWorkspace] = useState<BoardWorkspace | undefined>(workspace)
 
-  const cwd = workspace?.cwd
+  const cwd = selectedWorkspace?.cwd
 
   const refresh = useCallback(async (): Promise<void> => {
     if (cwd === undefined) return
@@ -208,12 +217,25 @@ export function BoardPage({ api, workspace, onClose, t, openSession }: BoardPage
     return groups
   }, [cards])
 
-  if (workspace === undefined) {
+  // No workspace selected yet — if any are registered, let the user pick one;
+  // otherwise show the empty hint.
+  if (selectedWorkspace === undefined) {
     return (
       <div className="kb-overlay">
         <BoardHeader onClose={onClose} t={t} />
         <div className="kb-body">
-          <p className="kb-empty">{t('noWorkspace')}</p>
+          {workspaces.length > 0 ? (
+            <WorkspacePicker
+              workspaces={workspaces}
+              selected={undefined}
+              open={workspacePickerOpen}
+              onToggle={() => setWorkspacePickerOpen(v => !v)}
+              onSelect={ws => { setSelectedWorkspace(ws); setWorkspacePickerOpen(false) }}
+              t={t}
+            />
+          ) : (
+            <p className="kb-empty">{t('noWorkspace')}</p>
+          )}
         </div>
       </div>
     )
@@ -223,6 +245,16 @@ export function BoardPage({ api, workspace, onClose, t, openSession }: BoardPage
     <div className="kb-overlay" data-testid="kanban-page">
       <BoardHeader onClose={onClose} t={t} path={path} onRefresh={() => { void refresh() }} />
       <div className="kb-body">
+        {workspaces.length > 0 && (
+          <WorkspacePicker
+            workspaces={workspaces}
+            selected={selectedWorkspace}
+            open={workspacePickerOpen}
+            onToggle={() => setWorkspacePickerOpen(v => !v)}
+            onSelect={ws => { setSelectedWorkspace(ws); setWorkspacePickerOpen(false) }}
+            t={t}
+          />
+        )}
         {error !== undefined && <p className="kb-error">{error}</p>}
         {archivedNotice !== undefined && (
           <p className="kb-archived">
@@ -439,6 +471,51 @@ function NoteSpecEditor(props: { api: BoardApi; cwd: string; t: BoardPageProps['
         </div>
       )}
     </section>
+  )
+}
+
+/** Workspace switcher: a Menu listing every registered workspace, with the current one highlighted. */
+function WorkspacePicker(props: {
+  workspaces: readonly BoardWorkspace[]
+  selected: BoardWorkspace | undefined
+  open: boolean
+  onToggle: () => void
+  onSelect: (ws: BoardWorkspace) => void
+  t: BoardPageProps['t']
+}) {
+  const { workspaces, selected, open, onToggle, onSelect, t } = props
+  const items = workspaces.map(ws => ({
+    id: ws.workspaceId,
+    label: ws.title,
+    ...selected !== undefined && ws.workspaceId === selected.workspaceId ? { icon: <IconCheckOutline16 /> } : {},
+  }))
+  return (
+    <div className="kb-workspace-picker">
+      <span className="kb-workspace-label">{t('workspaceLabel')}:</span>
+      <Menu
+        open={open}
+        onClose={onToggle}
+        items={items}
+        selectedId={selected?.workspaceId}
+        onSelect={(id) => {
+          const ws = workspaces.find(w => w.workspaceId === id)
+          if (ws !== undefined) onSelect(ws)
+          onToggle()
+        }}
+        align="start"
+        anchor={(
+          <Button
+            variant="outline"
+            size="sm"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={onToggle}
+          >
+            {selected?.title ?? t('workspaceChoose')}
+          </Button>
+        )}
+      />
+    </div>
   )
 }
 

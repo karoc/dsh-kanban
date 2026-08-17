@@ -18,7 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import { BoardPage, type BoardApi, type BoardMutationBody, type BoardViewPayload, type BoardWorkspace, type NoteSpecMutation, type NoteSpecView } from './BoardPage.tsx'
+import { BoardPage, type BoardApi, type BoardMutationBody, type BoardViewPayload, type NoteSpecMutation, type NoteSpecView } from './BoardPage.tsx'
 import { closeBoard, openBoard } from './board-state.ts'
 import { KanbanOverlay, SidebarKanbanButton, type BoardOverlayInjected } from './KanbanSurface.tsx'
 import { en, zh, type BoardKey } from './locales.ts'
@@ -37,28 +37,6 @@ const NS = 'dsh-kanban'
 
 /** Required services (cordis fiber inject). */
 export const inject = ['slots', 'locale', 'sessions', 'workspaces']
-
-/** Resolve a workspace for the board from the session/workspace seats. */
-function resolveWorkspace(
-  sessionList: { byId?: Record<string, { cwd?: string }>; current?: string },
-  workspaceList: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string },
-): BoardWorkspace | undefined {
-  const current = sessionList.current
-  if (current !== undefined) {
-    const cwd = sessionList.byId?.[current]?.cwd
-    if (cwd !== undefined && cwd !== '') {
-      const base = cwd.replace(/[/\\]+$/, '').split(/[/\\]/).pop() ?? cwd
-      return { cwd, title: base }
-    }
-  }
-  const items = workspaceList.items ?? []
-  const recentId = workspaceList.recentWorkspaceId
-  const workspace = items.find(item => item.workspaceId === recentId) ?? items[0]
-  if (workspace !== undefined) {
-    return { cwd: workspace.path, title: workspace.title ?? workspace.path }
-  }
-  return undefined
-}
 
 /** Build the fetch-backed board api bound to this origin. */
 function createBoardApi(): BoardApi {

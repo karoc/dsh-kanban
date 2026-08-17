@@ -42,6 +42,8 @@ export const en = {
   specOverrideActive: 'Custom overrides active.',
   archivedNotice: 'Archived {count} done card(s) to {path}',
   sourceSession: 'Open source session',
+  workspaceLabel: 'Workspace',
+  workspaceChoose: 'Choose a workspace…',
 }
 
 /** The board page copy key set. */
@@ -89,4 +91,6 @@ export const zh: { [Key in keyof typeof en]: string } = {
   specOverrideActive: '自定义覆盖生效中。',
   archivedNotice: '已归档 {count} 张已完成卡片到 {path}',
   sourceSession: '打开来源会话',
+  workspaceLabel: '工作区',
+  workspaceChoose: '选择工作区…',
 }

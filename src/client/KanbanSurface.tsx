@@ -43,29 +43,34 @@ export interface BoardOverlayInjected {
 }
 
 /**
- * Resolve a workspace for the board from the framework seats. Prefers the
- * current session's cwd, then the most recent workspace, then the first
- * workspace.
+ * Build the full workspace list plus the default (current-session) workspace
+ * from the framework seats. Default: the current session's cwd, then the most
+ * recent workspace, then the first workspace. The list drives the board page's
+ * workspace switcher.
  */
-function resolveWorkspace(
+function resolveWorkspaces(
   sessionList: { byId?: Record<string, { cwd?: string }>; current?: string },
   workspaceList: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string },
-): BoardWorkspace | undefined {
+): { all: BoardWorkspace[]; current: BoardWorkspace | undefined } {
+  const items = workspaceList.items ?? []
+  const all = items.map(item => ({
+    workspaceId: item.workspaceId,
+    cwd: item.path,
+    title: item.title ?? item.path,
+  }))
   const current = sessionList.current
   if (current !== undefined) {
     const cwd = sessionList.byId?.[current]?.cwd
     if (cwd !== undefined && cwd !== '') {
       const base = cwd.replace(/[/\\]+$/, '').split(/[/\\]/).pop() ?? cwd
-      return { cwd, title: base }
+      // Match the cwd to a registered workspace if possible (for a stable id).
+      const match = all.find(ws => ws.cwd === cwd)
+      return { all, current: match ?? { workspaceId: cwd, cwd, title: base } }
     }
   }
-  const items = workspaceList.items ?? []
   const recentId = workspaceList.recentWorkspaceId
-  const workspace = items.find(item => item.workspaceId === recentId) ?? items[0]
-  if (workspace !== undefined) {
-    return { cwd: workspace.path, title: workspace.title ?? workspace.path }
-  }
-  return undefined
+  const recent = all.find(ws => ws.workspaceId === recentId) ?? all[0]
+  return { all, current: recent }
 }
 
 /**
@@ -81,7 +86,7 @@ interface RootStandardProps {
 /** Overlay wrapper: renders the board page only while open. */
 export function KanbanOverlay(props: BoardOverlayInjected & RootStandardProps) {
   const open = useSyncExternalStore(subscribeBoard, getBoardOpen)
-  const workspace = resolveWorkspace(
+  const { all, current } = resolveWorkspaces(
     (props.useSessions?.((s: { byId?: Record<string, { cwd?: string }>; current?: string }) => s) as { byId?: Record<string, { cwd?: string }>; current?: string }) ?? {},
     (props.useWorkspaces?.((s: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string }) => s) as { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string }) ?? {},
   )
@@ -89,7 +94,8 @@ export function KanbanOverlay(props: BoardOverlayInjected & RootStandardProps) {
   return (
     <BoardPage
       api={props.api}
-      workspace={workspace}
+      workspace={current}
+      workspaces={all}
       onClose={props.onClose}
       t={props.t}
       openSession={props.openSession}
