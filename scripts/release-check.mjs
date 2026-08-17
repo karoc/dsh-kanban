@@ -163,7 +163,8 @@ if (stale.length > 0) {
 
 // 8. not already published (best effort; offline or 404 means not published).
 try {
-  const published = run(`npm view ${JSON.stringify('dsh-model-reasoning')}@${version} version`)
+  const packageName = JSON.parse(read('package.json')).name
+  const published = run(`npm view ${JSON.stringify(packageName)}@${version} version`)
   if (published.length > 0) fail(`version ${version} is already published on npm (${published}) — bump the version`)
 } catch {
   // E404 or network failure: treated as "not published yet"
