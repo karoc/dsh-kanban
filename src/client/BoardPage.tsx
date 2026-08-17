@@ -12,7 +12,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
-  IconCheckOutline16,
   IconChevronDownOutline14,
   IconCloseOutline16,
   IconPlusOutline16,
@@ -485,10 +484,11 @@ function WorkspacePicker(props: {
   t: BoardPageProps['t']
 }) {
   const { workspaces, selected, open, onToggle, onSelect, t } = props
+  // Menu renders its own check for selectedId — no per-item icon here, or the
+  // selected row would show two checks (ours + the built-in one).
   const items = workspaces.map(ws => ({
     id: ws.workspaceId,
     label: ws.title,
-    ...selected !== undefined && ws.workspaceId === selected.workspaceId ? { icon: <IconCheckOutline16 /> } : {},
   }))
   return (
     <Menu
@@ -531,10 +531,11 @@ function Card(props: {
 }) {
   const { card, t, onMove, onRemove, onOpenSession } = props
   const [statusOpen, setStatusOpen] = useState(false)
+  // Menu renders its own check for selectedId — no per-item icon here, or the
+  // selected row would show two checks.
   const statusItems = STATUSES.map(status => ({
     id: status,
     label: statusLabel(status, t),
-    ...status === card.status ? { icon: <IconCheckOutline16 /> } : {},
   }))
   const fields: Array<[string, string | undefined]> = [
     [t('fieldSummary'), card.summary],
