@@ -498,8 +498,9 @@ function WorkspacePicker(props: {
       selectedId={selected?.workspaceId}
       onSelect={(id) => {
         const ws = workspaces.find(w => w.workspaceId === id)
+        // The parent onSelect closes the picker; do not also toggle here or
+        // the menu would flip straight back open.
         if (ws !== undefined) onSelect(ws)
-        onToggle()
       }}
       align="start"
       anchor={(
