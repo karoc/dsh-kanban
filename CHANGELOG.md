@@ -5,6 +5,61 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-08-19
+
+### Added
+
+- **note_add DSH-depth guidance**: tool + parameter descriptions now direct the
+  model to write engineering-grade Agent Notes — Decision in present tense with
+  concrete names/contracts/boundaries and negative guarantees (what is NOT
+  done), Alternatives that are REAL rejected options each with why, and
+  Consequences recording what the trade-off cost AND bought; the system-prompt
+  guidance matches. Verified with a real model: generated notes now include
+  negative guarantees, real alternatives, present-tense facts, and boundaries.
+- **Session-start board snapshot** (`ctx.systemPrompt.context`,
+  `board:open-items`, order 114): every prompt assembly for an agent with a
+  workspace injects the board's open items (todo + in_progress), so the model
+  sees the board without having to remember to `board_list`. No agent / no cwd /
+  empty board / read errors contribute nothing. Only open items are injected
+  (done cards churn would disturb the prompt prefix / KV-cache stability).
+- **Wrap-up discipline (usage-strategy D)**: the board guidance now tells the
+  model to close the loop at the end of every work session — move completed
+  cards to done, add follow-ups as todos, update summaries, never leave stale
+  `in_progress` cards.
+- **Sidebar open-count badge (usage-strategy C)**:
+  - New lightweight host route `GET /kanban/counts?cwd=` returning `{ ok, open }`
+    (todo + in_progress count).
+  - `src/client/board-counts.ts`: module-level observable + polling; resolves
+    the workspace from the workspaces feed's most-recent workspace and
+    subscribes to workspace-list changes so the badge appears as soon as data
+    is ready.
+  - The sidebar 「看板」 entry shows the open count (wide + rail states, 99+
+    cap).
+- **Board page auto-refresh**: while open, the page refreshes every 15s so
+  model/other-session writes appear without a manual refresh.
+
+### Fixed
+
+- **Card delete now requires confirmation**: clicking the trash icon opens a
+  Modal naming the card and stating the removal is permanent and irreversible;
+  only confirming deletes (Cancel / Escape keep it). Protects against accidental
+  one-click loss.
+
+### Changed
+
+- **README transparency**: added "How it works & transparency" section (zh/en)
+  documenting the two mechanisms that drive model usage (fixed guidance +
+  session-start auto-injection) and the auto-injection trade-offs (guaranteed
+  visibility vs per-request token overhead and KV-cache prefix changes),
+  plus the data-safety commitment (write-only, archiving not deleting).
+
+## [0.1.1] - 2026-08-18
+
+### Changed
+
+- Version-only bump (no functional changes shipped in this release; the
+  following 0.1.2 carries the accumulated features).
+
 ## [0.1.0] - 2026-08-17
 
 ### Added
