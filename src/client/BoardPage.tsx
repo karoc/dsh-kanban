@@ -15,6 +15,7 @@ import {
   IconChevronDownOutline14,
   IconCloseOutline16,
   IconPlusOutline16,
+  IconQueueOutline14,
   IconRefreshOutline16,
   IconTrashOutline16,
   Input,
@@ -532,7 +533,8 @@ function WorkspacePicker(props: {
   )
 }
 
-/** One card row: title, the what/why/rejected fields, tags, status Menu + delete. */
+/** One card row: title, the what/why/rejected fields, tags, then an action row
+ * (source session + status + delete pinned right). */
 function Card(props: {
   card: BoardCardView
   t: BoardPageProps['t']
@@ -567,53 +569,55 @@ function Card(props: {
           ))}
         </div>
       )}
-      {card.sourceSessionId !== undefined && onOpenSession !== undefined && (
-        <div className="kb-card-meta">
-          <button
-            type="button"
-            className="kb-source-btn"
-            onClick={() => onOpenSession(card.sourceSessionId as string)}
-          >
-            {t('sourceSession')}
-          </button>
-        </div>
-      )}
-      {card.tags.length > 0 && (
-        <div className="kb-card-meta">
-          {card.tags.map(tag => <Pill key={tag} active>{tag}</Pill>)}
-        </div>
-      )}
       <div className="kb-card-actions">
-        <Menu
-          open={statusOpen}
-          onClose={() => { setStatusOpen(false) }}
-          items={statusItems}
-          selectedId={card.status}
-          onSelect={(id) => { onMove(card.id, id as BoardCardView['status']); setStatusOpen(false) }}
-          align="start"
-          // Portal: the card sits inside the scrolling column, so a plain
-          // bottom-anchored list would be clipped by the column's overflow.
-          // Portaling renders the list fixed over document.body instead.
-          portal
-          anchor={(
-            <Button
-              variant="outline"
-              size="sm"
-              aria-haspopup="menu"
-              aria-expanded={statusOpen}
-              onClick={() => { setStatusOpen(v => !v) }}
+        {card.tags.length > 0 && (
+          <div className="kb-card-meta">
+            {card.tags.map(tag => <Pill key={tag} active>{tag}</Pill>)}
+          </div>
+        )}
+        <div className="kb-card-row">
+          {card.sourceSessionId !== undefined && onOpenSession !== undefined && (
+            <button
+              type="button"
+              className="kb-source-btn"
+              onClick={() => onOpenSession(card.sourceSessionId as string)}
             >
-              {statusLabel(card.status, t)}
-            </Button>
+              <IconQueueOutline14 />
+              <span>{t('sourceSession')}</span>
+            </button>
           )}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          icon={<IconTrashOutline16 />}
-          aria-label={t('remove')}
-          onClick={() => setConfirmDelete(true)}
-        />
+          <Menu
+            open={statusOpen}
+            onClose={() => { setStatusOpen(false) }}
+            items={statusItems}
+            selectedId={card.status}
+            onSelect={(id) => { onMove(card.id, id as BoardCardView['status']); setStatusOpen(false) }}
+            align="start"
+            // Portal: the card sits inside the scrolling column, so a plain
+            // bottom-anchored list would be clipped by the column's overflow.
+            // Portaling renders the list fixed over document.body instead.
+            portal
+            anchor={(
+              <Button
+                variant="outline"
+                size="sm"
+                aria-haspopup="menu"
+                aria-expanded={statusOpen}
+                onClick={() => { setStatusOpen(v => !v) }}
+              >
+                {statusLabel(card.status, t)}
+              </Button>
+            )}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<IconTrashOutline16 />}
+            aria-label={t('remove')}
+            onClick={() => setConfirmDelete(true)}
+            className="kb-trash-btn"
+          />
+        </div>
       </div>
       <Modal
         open={confirmDelete}

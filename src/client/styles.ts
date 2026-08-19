@@ -150,15 +150,21 @@ export const KANBAN_STYLES = `
 .kb-card-field { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); word-break: break-word; }
 .kb-card-field-label { color: var(--dsw-alias-label-tertiary); font-weight: 600; }
 .kb-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* Card footer: tags on their own line, then one action row holding
+   [source-session][status] ... [delete pinned right]. */
+.kb-card-actions { display: flex; flex-direction: column; gap: 6px; }
+.kb-card-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .kb-source-btn {
-  display: inline-flex; align-items: center;
-  height: 22px; padding: 0 8px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;
   background: transparent; color: var(--dsw-alias-label-secondary);
-  font: inherit; font-size: 11px; line-height: 16px; cursor: pointer;
+  font: inherit; font-size: 12px; line-height: 18px;
+  cursor: pointer; white-space: nowrap;
 }
-.kb-source-btn:hover { background: var(--dsw-alias-interactive-bg-hover); }
-.kb-card-actions { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
-.kb-composer-field { flex: 1; min-width: 0; }
+.kb-source-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.kb-source-btn svg { flex: none; }
+.kb-trash-btn { margin-left: auto; }
 .kb-composer {
   display: flex; flex-direction: column; gap: 8px;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px;
@@ -166,6 +172,7 @@ export const KANBAN_STYLES = `
   background: var(--dsw-alias-bg-module-platform);
 }
 .kb-composer-row { display: flex; gap: 8px; align-items: center; }
+.kb-composer-field { flex: 1; min-width: 0; }
 /* The three "what/why/rejected" inputs: one row, three equal columns — the
    same rhythm as the board column headers above. */
 .kb-composer-fields {
