@@ -57,14 +57,31 @@ dsh's **system prompt** and visible to the user:
 |---|---|
 | ✅ Pro | The model **always sees** the current workspace's open items — no "remember to check"; cross-session continuity is guaranteed by the system, not the model's diligence |
 | ⚠️ Cost 1 | Every request carries the board summary, adding **fixed token overhead** (grows with the board) |
-| ⚠️ Cost 2 | Board changes **alter the request prefix**, which can affect **KV-cache reuse** (open item in [docs/usage-strategy.md](docs/usage-strategy.md)) |
-| ⚠️ Trade-off | "System pushes" vs "model queries" — injection guarantees visibility at the price of per-request overhead; with a very large board, consider injecting open items only |
+| ⚠️ Cost 2 | Board changes **alter the request prefix**, which can affect **KV-cache reuse**. To limit this, **only open items are injected** (todo + in_progress) — done cards churn would worsen prefix instability |
+| ⚠️ Trade-off | "System pushes" vs "model queries" — injection guarantees visibility at the price of per-request overhead |
+
+**The full "make the model use it" mechanism:**
+1. **Board usage guidance** (`ctx.systemPrompt.section`): what the board is,
+   when to record, how it differs from `todo_write`.
+2. **Session-start auto-injection** (`ctx.systemPrompt.context`): open items
+   are pushed into the model's context (see above).
+3. **Wrap-up discipline**: the guidance requires that at the end of every work
+   session the model moves completed cards to done, adds follow-ups as todos,
+   updates summaries, and **never leaves stale `in_progress` cards** — the
+   board stays an honest cross-session hand-off.
+4. **User-side visibility**: the sidebar 「看板」 entry shows an **open-item
+   count badge** (backed by the `/kanban/counts` route; workspace resolved from
+   the most-recent workspace, subscribes to workspace-list changes so it
+   appears as soon as data is ready); the board page **auto-refreshes every
+   15s** while open, so model/other-session writes appear without a manual
+   refresh.
 
 **Data-safety commitment**: the plugin **only writes** board/note files; there
 is no startup, scheduled, or install-time cleanup. Cards are removed only by an
-explicit `board_remove` / the Web delete button; excess done cards are
-**archived** (moved to `.agents/notes/archive.json`), never deleted. All data
-lives inside your **workspace directory** (git-trackable, hand-editable).
+explicit `board_remove` / the Web delete button (which requires a confirmation
+Modal — no accidental one-click loss); excess done cards are **archived**
+(moved to `.agents/notes/archive.json`), never deleted. All data lives inside
+your **workspace directory** (git-trackable, hand-editable).
 
 ### Model tools
 
@@ -129,10 +146,26 @@ shipped, not part of the user-facing `test` chain).
 
 ### Web board page (client half)
 
-- A 「看板」 entry in the sidebar footer (`sidebar.footer.action`);
-- A full-screen three-column board: **To do / In progress / Done**, each column with a card count;
-- Per card: a status dropdown (including "done"), and delete; an add form (title + optional description, Enter to submit) at the bottom;
-- The page reads/writes the same `KANBAN.json` through the host-registered `/kanban/api` webServer route (GET read, POST add/update/remove) — independent of built-in dsh RPC, so official upgrades don't touch it.
+- A 「看板」 entry in the sidebar footer (`sidebar.footer.action`), showing an
+  **open-item count badge** (number when there are todo/in_progress cards,
+  "99+" cap);
+- A full-screen three-column board: **To do / In progress / Done**, each
+  column with a card count;
+- **Workspace switcher**: switch between any registered workspace at the top
+  (each workspace owns its KANBAN.json); defaults to the current session's
+  workspace;
+- Per card: a status dropdown (including "done"), and **delete with a
+  confirmation Modal** (no accidental one-click loss); cards show the
+  what/why/rejected fields the model filled, and model-created cards carry an
+  "Open source session" button (jump to the handling session);
+- An add form at the bottom: title + the three what/why/rejected inputs laid
+  out in one row of three columns;
+- **Auto-refresh**: while open, the page refreshes every 15s so
+  model/other-session writes appear without a manual refresh;
+- The page reads/writes the same `KANBAN.json` through the host-registered
+  `/kanban/api` and `/kanban/counts` webServer routes (GET read, POST
+  add/update/remove) — independent of built-in dsh RPC, so official upgrades
+  don't touch it.
 
 ### Data file
 

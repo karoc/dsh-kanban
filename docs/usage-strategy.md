@@ -18,29 +18,32 @@
 - 实现：`boardSnapshotText()` 按 cwd 同步读 KANBAN.json（新增 `readBoardSync`），只注入**未完成项**（todo + in_progress），控制 token 开销并减少 prompt 前缀抖动；无会话/无 cwd/看板空/读失败 → 返回空串不贡献。
 - 验证：`scripts/verify-context.mjs`（注入开放项不含 done、无 agent/无 cwd 为空）。
 
-### B. 关键节点半自动上板
+### B. 关键节点半自动上板 —— ✅ 已并入 D（2026-08-19）
 - systemPrompt 引导：收到多步骤任务→ board_add；每完成一步 → board_update；任务结束 → 收尾更新。
-- 让"完成一步后必须更新状态"成为纪律（类似 todo_write 的强制感），不靠自觉。
+- 引导里已有"用户提出多步骤计划 → 逐条 board_add；工作推进 → board_update 移 in_progress/done"；与 D 的收尾纪律合并表述。
 
-### C. 用户侧变更可见性
-- 侧边栏「看板」入口显示未完成计数（角标），人知道有东西待办。
-- 看板页在模型写入后自动刷新（当前打开才加载）。
+### C. 用户侧变更可见性 —— ✅ 已实现（2026-08-19）
+- 侧边栏「看板」入口显示未完成计数（角标）：新增 host 路由 `GET /kanban/counts?cwd=` 返回 `{ ok, open }`；`src/client/board-counts.ts` 模块级 observable + 轮询，工作区来自 workspaces feed 最近工作区，并订阅工作区列表变更（数据就绪立即显示，不等 30s 轮询）。wide/rail 状态都有角标，>99 显示 "99+"。
+- 看板页打开时每 15s 自动刷新，模型/其他会话写入后自动更新。
+- 实测：3080 侧边栏角标 12s 内出现显示 "4"。
 
-### D. 会话结束沉淀（收尾纪律）
+### D. 会话结束沉淀（收尾纪律）—— ✅ 已实现（2026-08-19）
 - 每轮工作结束，模型把"做了什么、留下什么待办"更新到看板——跨会话连续性由收尾保证。
-- 已有 2 张开发卡（当前阶段 in_progress / 待办 todo）作为起点。
+- 引导新增："Close the loop at the end of every work session: move completed cards to done, add new follow-up as a todo card, update summaries with what was actually done. Do not leave cards in stale states."
+- 实测：让模型收尾「删除确认测试卡」，它 board_list → board_update 移到 done 并更新 summary。
 
-### E. 我自己的使用纪律
+### E. 我自己的使用纪律 —— ✅ 已执行
 - 每轮开发此项目：先 board_list → 更新看板 → 结束前更新状态。
-- 已开始：补记了开发待办卡 + Agent Note（审计/发版决策）。
+- 已落实：看板开放项只保留真实待办（当前仅「待办-发 v0.1.2」），过时卡已收尾。
 
-## 建议的实施顺序
+## 建议的实施顺序（已全部完成）
 
-1. **A（自动注入）**：杠杆最大，先做。需先验证 context 动态函数能否按 agent cwd 读工作区看板。
-2. **D（收尾纪律）**：成本最低，配合 A 立刻见效。
-3. **C（角标）**：用户侧可见性，中等成本。
-4. **B（节点引导强化）**：在 A 之后增强。
+1. **A（自动注入）**：✅ 已实现。已验证 AssembleContext.agent 可由 dsh-agent 的 `declare module` 扩展拿到，`assembleContextFor(agent)` 每次装配传入 `{ agent, scope: agent }`。
+2. **D（收尾纪律）**：✅ 已实现。
+3. **C（角标）**：✅ 已实现。
+4. **B（节点引导强化）**：✅ 已并入 D。
 
-## 待验证的技术点
-- `ctx.systemPrompt.context` 的 text 函数里，能否从 AssembleContext.scope 拿到 agent → session.cwd？
-- context 注入是否会造成 KV cache 前缀不稳定（每次看板内容变 → prompt 变）？
+## 待验证的技术点（已有结论）
+
+- ✅ `ctx.systemPrompt.context` 的 text 函数里，能通过 `AssembleContext.agent`（dsh-agent `declare module` 扩展）拿到 `agent.session.header.cwd`。
+- ⚠️ context 注入的 KV cache 前缀稳定性：只注入未完成项（todo + in_progress），done 卡片 churn 不注入，减少前缀抖动；但仍需留意看板内容变化对前缀的影响（README 已明示该取舍）。
