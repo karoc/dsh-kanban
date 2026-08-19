@@ -1,3 +1,9 @@
 node_modules/
 lib/
 *.tsbuildinfo
+# Workspace-local runtime data (never committed): the board store, Agent
+# Notes, and generated icon-gallery artifacts.
+/KANBAN.json
+/.agents/
+/icons-gallery.html
+/icons-gallery.png
