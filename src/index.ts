@@ -207,7 +207,11 @@ const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) b
   + 'After completing a non-trivial change, call note_add with: a class from '
   + `{${DEFAULT_NOTE_CLASSES.join(', ')}}; a short kebab-case `
   + 'topic; the problem being solved; the decision made; what alternatives were rejected and '
-  + 'why; and consequences. Keep it a few paragraphs, not a full essay.'
+  + 'why; and consequences. Write at DSH engineering depth: Decision states shipped reality '
+  + 'in present tense with concrete names and negative guarantees (what is NOT done, '
+  + 'boundaries, safety rules); Alternatives are real options that lost, each with why; '
+  + 'Consequences records what the trade-off cost and bought. Keep it a few paragraphs, '
+  + 'not a full essay.'
 
 /**
  * Session-start board snapshot injected into every assembly (systemPrompt
@@ -602,7 +606,13 @@ export function apply(ctx: Context): void {
       + 'architecture, cross-file/cross-package conventions, process or tooling, test '
       + 'strategy, storage/wire/config format, or makes a decision a maintainer could '
       + 'reasonably revisit. Call this AFTER completing such a change, alongside any board '
-      + 'cards — the note records the why and what was rejected that the code cannot.',
+      + 'cards — the note records the why and what was rejected that the code cannot. '
+      + 'Write at DSH engineering depth: the Decision states shipped reality in the present '
+      + 'tense (concrete names, contracts, boundaries — not a summary); include negative '
+      + 'guarantees and edge cases (what is NOT done, permission/ownership boundaries, '
+      + 'safety rules); Alternatives must be REAL options that lost, each with why (never '
+      + 'invented); Consequences records what the trade-off COST and BOUGHT; cross-link '
+      + 'related notes by relative path when they exist under .agents/notes.',
     parameters: {
       class: {
         type: 'string',
@@ -618,20 +628,20 @@ export function apply(ctx: Context): void {
       problem: {
         type: 'string',
         required: true,
-        description: 'The problem being solved (one short paragraph).',
+        description: 'The motivation, written to stand without the solution (one short paragraph).',
       },
       decision: {
         type: 'string',
         required: true,
-        description: 'The decision made (what was done and why; a few paragraphs).',
+        description: 'Shipped reality in present tense: concrete implementation facts, names, contracts, boundaries, and negative guarantees (what is NOT done). A few paragraphs.',
       },
       alternatives: {
         type: 'string',
-        description: 'Optional: what alternatives were rejected and why.',
+        description: 'Real alternatives that were rejected, each with why it lost — one bold-led paragraph per alternative. Never invent alternatives.',
       },
       consequences: {
         type: 'string',
-        description: 'Optional: consequences and effects of the decision.',
+        description: 'What the trade-off cost AND bought: side effects, follow-up obligations, named coverage gaps.',
       },
     },
     output: NOTE_OUTPUT,
