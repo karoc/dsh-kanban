@@ -48,6 +48,25 @@ export const KANBAN_STYLES = `
   overflow: hidden;
   white-space: nowrap;
 }
+/* Open-item count badge on the sidebar entry (wide + rail states). */
+.kb-badge {
+  margin-left: auto;
+  min-width: 16px; height: 16px;
+  padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-bg-base);
+  font-size: 10px; line-height: 16px; font-weight: 600;
+}
+.kb-badge-rail {
+  position: absolute;
+  top: -2px; right: -2px;
+  min-width: 14px; height: 14px;
+  border-radius: 7px;
+  font-size: 9px; line-height: 14px;
+}
+.kb-sidebar-trigger-rail { position: relative; }
 .kb-overlay {
   position: fixed; inset: 0; z-index: 50;
   display: flex; flex-direction: column;

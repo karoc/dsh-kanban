@@ -175,6 +175,13 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
     void refresh()
   }, [refresh])
 
+  // Auto-refresh while open: the model or another session may write the board
+  // at any time; a light poll keeps this view honest without a manual refresh.
+  useEffect(() => {
+    const timer = setInterval(() => { void refresh() }, 15000)
+    return () => clearInterval(timer)
+  }, [refresh])
+
   const applyMutation = useCallback(async (body: BoardMutation): Promise<void> => {
     if (cwd === undefined) return
     setError(undefined)

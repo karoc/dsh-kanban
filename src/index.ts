@@ -201,6 +201,12 @@ const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) b
   + 'user should still see after switching branches or opening a new session: todo_write is '
   + 'the transient in-turn task list, while the board is the durable cross-session record. '
   + 'Check board_list when resuming work in a workspace to pick up what was planned before.\n\n'
+  + 'Close the loop at the end of every work session: when the user\'s request is done or '
+  + 'reaches a clear stopping point, update the board to reflect reality — move completed '
+  + 'cards to done, add any new follow-up as a todo card, and update summaries with what was '
+  + 'actually done. Do not leave cards in stale states (e.g. in_progress with no work left); '
+  + 'the board must be an honest hand-off for the next session, not a backlog that drifts. '
+  + 'This wrap-up is what makes the board a durable memory across sessions.\n\n'
   + 'You also maintain Agent Notes (the note_add / note_list tools) at '
   + '.agents/notes/implemented/<class>/<date>-<topic>.md, mirroring the DeepSeek Harness '
   + `repository discipline. ${DEFAULT_NON_TRIVIAL_DEFINITION} `
@@ -820,6 +826,35 @@ function registerWebApi(ctx: Context): void {
       })
     },
   })
+
+  // Lightweight open-item count: drives the sidebar badge (polled by the
+  // client). Returns just the counts, not the whole board.
+  server.register({
+    kind: 'prefix',
+    path: '/kanban/counts',
+    handler: (req, res) => {
+      void handleCounts(req, res).catch(error => {
+        if (!res.writableEnded) {
+          sendJson(res, 500, {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      })
+    },
+  })
+
+  async function handleCounts(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const url = new URL(req.url ?? '/', 'http://localhost')
+    const cwd = url.searchParams.get('cwd')
+    if (cwd === null || cwd === '') {
+      sendJson(res, 400, { ok: false, error: 'kanban: GET /kanban/counts requires a cwd query parameter' })
+      return
+    }
+    const board = await readBoard(cwd)
+    const open = board.cards.filter(card => card.status === 'todo' || card.status === 'in_progress').length
+    sendJson(res, 200, { ok: true, open, cwd })
+  }
 
   async function handleSpec(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const method = req.method ?? 'GET'

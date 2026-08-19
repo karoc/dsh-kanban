@@ -19,6 +19,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { BoardPage, type BoardApi, type BoardMutationBody, type BoardViewPayload, type NoteSpecMutation, type NoteSpecView } from './BoardPage.tsx'
+import { startCountsPolling, triggerCountsPoll } from './board-counts.ts'
 import { closeBoard, openBoard } from './board-state.ts'
 import { KanbanOverlay, SidebarKanbanButton, type BoardOverlayInjected } from './KanbanSurface.tsx'
 import { en, zh, type BoardKey } from './locales.ts'
@@ -111,6 +112,33 @@ export function apply(ctx: ClientContext): void {
   const api = createBoardApi()
   // Translate supports (key, params?) — aligned with ui-slots' Translate type.
   const t = ctx.locale.bind(NS) as (key: BoardKey, params?: Record<string, unknown>) => string
+
+  // Sidebar badge: poll the current workspace's open-item count so the
+  // 「看板」 entry shows how many cards are open. Workspace source: the
+  // workspaces feed's most-recent workspace (more reliable than the current
+  // session, which can be undefined before a session is selected). Also
+  // subscribes to workspace-list changes so the badge appears as soon as data
+  // is ready (not after the first 30s poll). Stops on plugin teardown.
+  ctx.effect(() => {
+    const stop = startCountsPolling(() => {
+      const workspaces = ctx.get('workspaces') as
+        | { list?: { getSnapshot: () => { items?: ReadonlyArray<{ workspaceId: string; path: string }>; recentWorkspaceId?: string } } }
+        | undefined
+      try {
+        const state = workspaces?.list?.getSnapshot()
+        const items = state?.items ?? []
+        const recent = items.find(item => item.workspaceId === state?.recentWorkspaceId)
+        return recent?.path ?? items[0]?.path
+      } catch {
+        return undefined
+      }
+    })
+    const workspaces = ctx.get('workspaces') as
+      | { list?: { subscribe: (fn: () => void) => () => void } }
+      | undefined
+    const unsubscribe = workspaces?.list?.subscribe(triggerCountsPoll)
+    return () => { stop(); unsubscribe?.() }
+  }, 'dsh-kanban: counts polling')
 
   // Sidebar footer action: the "看板" entry that opens the page.
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({

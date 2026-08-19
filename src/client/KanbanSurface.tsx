@@ -11,16 +11,19 @@ import { useSyncExternalStore } from 'react'
 import { IconChecklistOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { BoardPage, type BoardApi, type BoardWorkspace } from './BoardPage.tsx'
 import { getBoardOpen, subscribeBoard } from './board-state.ts'
+import { getCountsSnapshot, subscribeCounts } from './board-counts.ts'
 import type { BoardKey } from './locales.ts'
 
 /**
  * Sidebar footer entry button: icon + label, left-aligned, styled exactly
  * like the Settings trigger (34px compact row, 12px radius, 10px left pad)
  * so it sits flush with the Settings entry below it. The rail (collapsed)
- * state shows only the icon, like the other rail controls.
+ * state shows only the icon, like the other rail controls. Shows an open-item
+ * count badge when the current workspace has todo/in_progress cards.
  */
 export function SidebarKanbanButton(props: { onClick: () => void; t: () => string; wide?: boolean }) {
   const wide = props.wide ?? true
+  const { open } = useSyncExternalStore(subscribeCounts, getCountsSnapshot)
   return (
     <button
       type="button"
@@ -30,6 +33,11 @@ export function SidebarKanbanButton(props: { onClick: () => void; t: () => strin
     >
       <IconChecklistOutline14 size={wide ? 16 : 18} />
       {wide && <span className="kb-sidebar-trigger-label">{props.t()}</span>}
+      {open > 0 && (
+        <span className={wide ? 'kb-badge' : 'kb-badge kb-badge-rail'} title={`${open} open`}>
+          {open > 99 ? '99+' : String(open)}
+        </span>
+      )}
     </button>
   )
 }
