@@ -158,10 +158,21 @@ shipped, not part of the user-facing `test` chain).
   confirmation Modal** (no accidental one-click loss); cards show the
   what/why/rejected fields the model filled, and model-created cards carry an
   "Open source session" button (jump to the handling session);
+- **Two-line clamped previews**: each of the three what/why/rejected fields on
+  a card shows at most two lines, with an ellipsis (`...`) for the rest — cards
+  stay compact and scannable;
+- **Detail dialog**: clicking the card's title + what/why/rejected region
+  (including the description) opens a detail Modal where the full content is
+  laid out in labeled sections (icon + label + newline-preserving body), plus
+  status, tags, source session and created/updated times — a comfortable
+  reading view;
 - An add form at the bottom: title + the three what/why/rejected inputs laid
   out in one row of three columns;
-- **Auto-refresh**: while open, the page refreshes every 15s so
-  model/other-session writes appear without a manual refresh;
+- **Silent auto-refresh**: while open, the page polls every 15s and diffs by a
+  content signature — when nothing changed it leaves the card DOM completely
+  untouched, so it never interrupts reading or drops the scroll position; the
+  header shows "auto-refreshed at HH:mm:ss" so the poll's liveness is visible;
+  a failed poll keeps the current view (no error flash);
 - The page reads/writes the same `KANBAN.json` through the host-registered
   `/kanban/api` and `/kanban/counts` webServer routes (GET read, POST
   add/update/remove) — independent of built-in dsh RPC, so official upgrades

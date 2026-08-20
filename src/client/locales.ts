@@ -48,6 +48,12 @@ export const en = {
   deleteConfirm: 'Delete "{title}"? This removes the card from KANBAN.json permanently. This cannot be undone.',
   deleteCancel: 'Cancel',
   deleteConfirmAction: 'Delete',
+  fieldDescription: 'Description',
+  detailHint: 'View details',
+  detailCreated: 'Created {time}',
+  detailUpdated: 'Updated {time}',
+  detailEmpty: 'No further details on this card.',
+  autoUpdatedAt: 'auto-refreshed {time}',
 }
 
 /** The board page copy key set. */
@@ -101,4 +107,10 @@ export const zh: { [Key in keyof typeof en]: string } = {
   deleteConfirm: '确定删除「{title}」吗？这会把卡片从 KANBAN.json 永久移除，无法撤销。',
   deleteCancel: '取消',
   deleteConfirmAction: '删除',
+  fieldDescription: '描述',
+  detailHint: '查看详情',
+  detailCreated: '创建于 {time}',
+  detailUpdated: '更新于 {time}',
+  detailEmpty: '这张卡片没有更多详情。',
+  autoUpdatedAt: '自动更新于 {time}',
 }

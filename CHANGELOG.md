@@ -5,6 +5,44 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Silent auto-refresh (no more scroll loss)**: the board page's 15s poll now
+  diffs by a content signature — when nothing changed it never touches the card
+  state or the list DOM, so an open board no longer resets your reading/scroll
+  position every poll. Cards are memoized, so an unchanged poll re-renders only
+  the header's "auto-refreshed at HH:mm:ss" liveness line (new, second-resolution
+  `formatTimeWithSeconds`); a failed background poll keeps the current view
+  instead of flashing an error and wiping the board. The manual refresh button
+  and workspace switch still use the blocking loading path.
+- **Two-line clamped card fields**: each of the three what/why/rejected fields
+  on a card preview now clamps to at most two lines with an ellipsis
+  (`-webkit-line-clamp: 2`), keeping cards compact and scannable.
+
+### Added
+
+- **Card detail dialog**: the card's title + description + the three
+  what/why/rejected fields form a clickable/keyboard-reachable region (with a
+  subtle inspect affordance) that opens a headless `Modal` (`CardDetail`):
+  full, newline-preserving content in labeled sections with icons, a status
+  badge + tag pills, the source-session jump button, and created/updated
+  timestamps — a formatted, reading-friendly view of the whole card.
+
+### Fixed
+
+- **Sidebar badge now follows workspace switches**: the 「看板」 open-count
+  badge resolved its workspace from the workspaces feed's `recentWorkspaceId`
+  — which DSH projects as "the workspace with the most recently updated
+  session", not the workspace the user is currently viewing — so after
+  switching workspace the badge kept showing the previous workspace's count
+  while the board page itself followed the current session. The badge now
+  resolves from the current session's cwd first (the same rule the board page
+  uses), falling back to the recent workspace, and subscribes to the session
+  list (the feed that actually changes on a switch) in addition to the
+  workspace list, so it re-resolves immediately.
+
 ## [0.1.2] - 2026-08-19
 
 ### Added

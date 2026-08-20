@@ -144,10 +144,48 @@ export const KANBAN_STYLES = `
   padding: 10px 12px;
   background: var(--dsw-alias-bg-base);
 }
-.kb-card-title { margin: 0; font-size: 13px; line-height: 18px; word-break: break-word; }
+/* The clickable content region (title + description + the three what/why/
+   rejected fields) that opens the detail dialog: pointer cursor, hover tint,
+   and a subtle "inspect" affordance beside the title. Keyboard reachable
+   (role=button). The action row below is outside this region. */
+.kb-card-hit {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 2px; margin: -2px;
+  border-radius: 8px;
+  cursor: pointer;
+  outline: none;
+  transition: background 120ms ease;
+}
+.kb-card-hit:hover,
+.kb-card-hit:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.kb-card-title {
+  margin: 0; font-size: 13px; line-height: 18px;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.kb-card-title-text { flex: 1; min-width: 0; word-break: break-word; }
+.kb-card-detail-icon {
+  flex: none; align-self: center;
+  color: var(--dsw-alias-label-tertiary);
+  transition: color 120ms ease;
+}
+.kb-card-hit:hover .kb-card-detail-icon,
+.kb-card-hit:focus-visible .kb-card-detail-icon {
+  color: var(--dsw-alias-label-primary);
+}
 .kb-card-desc { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); word-break: break-word; }
 .kb-card-fields { display: flex; flex-direction: column; gap: 4px; }
-.kb-card-field { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); word-break: break-word; }
+/* Each what/why/rejected field is clamped to at most two lines with an
+   ellipsis (webkit-line-clamp); the full text lives in the detail dialog. */
+.kb-card-field {
+  margin: 0; font-size: 12px; line-height: 18px;
+  color: var(--dsw-alias-label-secondary); word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .kb-card-field-label { color: var(--dsw-alias-label-tertiary); font-weight: 600; }
 .kb-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 /* Card footer: tags on their own line, then one action row holding
@@ -245,6 +283,87 @@ export const KANBAN_STYLES = `
   border: 1px solid var(--dsw-alias-border-l3); border-radius: 8px;
   background: var(--dsw-alias-bg-module);
   word-break: break-all;
+}
+/* Card detail dialog (headless Modal): wider than the 380px default, with a
+   fixed head (title + status/tags + close) over an independently scrolling,
+   pre-formatted body. Portaled to document.body, so scope under body. */
+body .kb-detail-modal { width: min(560px, 100%); }
+.kb-detail { display: flex; flex-direction: column; width: 100%; }
+.kb-detail-head {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 22px 14px 14px 24px;
+  flex: none;
+}
+.kb-detail-head-text {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.kb-detail-title {
+  margin: 0; font-size: 17px; line-height: 26px; font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  word-break: break-word; white-space: pre-wrap;
+}
+.kb-detail-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kb-detail-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 20px; padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px;
+  background: var(--dsw-alias-bg-module-platform);
+  font-size: 12px; line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+.kb-detail-close {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border: none; border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+.kb-detail-close:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+.kb-detail-scroll {
+  display: flex; flex-direction: column; gap: 16px;
+  overflow-y: auto;
+  max-height: min(56vh, 520px);
+  padding: 0 24px 8px;
+}
+.kb-detail-block { display: flex; flex-direction: column; gap: 6px; }
+.kb-detail-block-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; line-height: 18px; font-weight: 600;
+  color: var(--dsw-alias-label-tertiary);
+}
+.kb-detail-block-label svg { flex: none; color: var(--dsw-alias-label-secondary); }
+/* Full text with preserved line breaks, on a soft panel for comfortable
+   reading; taller line-height than the card preview. */
+.kb-detail-block-body {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px;
+  background: var(--dsw-alias-bg-module);
+  font-size: 13px; line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap; word-break: break-word;
+}
+.kb-detail-empty {
+  margin: 0; padding: 20px; text-align: center;
+  font-size: 12px; line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  border: 1px dashed var(--dsw-alias-border-l3); border-radius: 10px;
+}
+.kb-detail-foot {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 2px; padding-top: 12px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+}
+.kb-detail-times {
+  font-size: 11px; line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
 }
 `
 

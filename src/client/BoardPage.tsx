@@ -9,15 +9,21 @@
  * own token-based styles.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   Button,
   IconChevronDownOutline14,
   IconCloseOutline16,
+  IconGoalOutline16,
+  IconInspectOutline12,
+  IconListPenOutline16,
   IconPlusOutline16,
   IconQueueOutline14,
   IconRefreshOutline16,
+  IconThinkOutline16,
   IconTrashOutline16,
+  IconWarningOutline16,
   Input,
   Menu,
   Modal,
@@ -138,12 +144,27 @@ function statusLabel(status: BoardCardView['status'], t: BoardPageProps['t']): s
   return t('statusDone')
 }
 
+/** Compact local timestamp (YYYY-MM-DD HH:mm) for card meta lines. */
+function formatTime(epochMs: number): string {
+  const date = new Date(epochMs)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/** Second-resolution timestamp for the header's live auto-refresh indicator. */
+function formatTimeWithSeconds(epochMs: number): string {
+  const date = new Date(epochMs)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${formatTime(epochMs)}:${pad(date.getSeconds())}`
+}
+
 /** The board page component (rendered inside the shell.overlay seat). */
 export function BoardPage({ api, workspace, workspaces, onClose, t, openSession }: BoardPageProps) {
   const [cards, setCards] = useState<BoardCardView[]>([])
   const [path, setPath] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>(undefined)
+  const [lastUpdated, setLastUpdated] = useState<number | undefined>(undefined)
   const [draftTitle, setDraftTitle] = useState('')
   const [draftSummary, setDraftSummary] = useState('')
   const [draftRationale, setDraftRationale] = useState('')
@@ -153,21 +174,41 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
   // The selected workspace: starts at the current session's workspace, and the
   // user can switch to any registered workspace.
   const [selectedWorkspace, setSelectedWorkspace] = useState<BoardWorkspace | undefined>(workspace)
+  // Content signature of the last rendered board (sorted cards serialized).
+  // The background poll skips setState entirely when it matches, so an
+  // unchanged board leaves the DOM — and the user's scroll position — intact.
+  const lastSignature = useRef<string | null>(null)
 
   const cwd = selectedWorkspace?.cwd
 
-  const refresh = useCallback(async (): Promise<void> => {
+  const refresh = useCallback(async (opts?: { silent?: boolean }): Promise<void> => {
     if (cwd === undefined) return
-    setLoading(true)
-    setError(undefined)
+    const silent = opts?.silent ?? false
+    if (!silent) {
+      setLoading(true)
+      setError(undefined)
+    }
     try {
       const board = await api.get(cwd)
-      setCards(sortCards(board.cards))
+      const sorted = sortCards(board.cards)
+      const signature = JSON.stringify(sorted)
+      // Every successful fetch (silent or not) marks the header "auto-refreshed
+      // at …" so the poll's liveness is visible without a manual refresh.
+      setLastUpdated(Date.now())
+      // A silent poll that sees no change must not touch the card state: even
+      // with stable keys, swapping the array reference plus a loading flash
+      // would churn the list DOM and drop the reading position mid-scroll.
+      // Cards are memoized, so an unchanged poll re-renders only the header.
+      if (silent && lastSignature.current === signature) return
+      lastSignature.current = signature
+      setCards(sorted)
       setPath(board.path)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      // Silent failures keep the current view — a stale board beats wiping
+      // the cards the user is reading because one background poll hiccuped.
+      if (!silent) setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [api, cwd])
 
@@ -177,9 +218,10 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
   }, [refresh])
 
   // Auto-refresh while open: the model or another session may write the board
-  // at any time; a light poll keeps this view honest without a manual refresh.
+  // at any time. Runs silently — the signature diff above skips setState when
+  // nothing changed, so this never disturbs what the user is reading.
   useEffect(() => {
-    const timer = setInterval(() => { void refresh() }, 15000)
+    const timer = setInterval(() => { void refresh({ silent: true }) }, 15000)
     return () => clearInterval(timer)
   }, [refresh])
 
@@ -252,7 +294,7 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
 
   return (
     <div className="kb-overlay" data-testid="kanban-page">
-      <BoardHeader onClose={onClose} t={t} path={path} onRefresh={() => { void refresh() }} />
+      <BoardHeader onClose={onClose} t={t} path={path} lastUpdated={lastUpdated} onRefresh={() => { void refresh() }} />
       <div className="kb-body">
         {workspaces.length > 0 && (
           <WorkspacePicker
@@ -534,8 +576,12 @@ function WorkspacePicker(props: {
 }
 
 /** One card row: title, the what/why/rejected fields, tags, then an action row
- * (source session + status + delete pinned right). */
-function Card(props: {
+ * (source session + status + delete pinned right). The title + description +
+ * the three what/why/rejected fields form the clickable region that opens the
+ * detail dialog; the action row is deliberately outside it. */
+// Memoized so an unchanged background poll re-renders only the header (the
+// card props are referentially stable when the cards array is untouched).
+const Card = memo(function Card(props: {
   card: BoardCardView
   t: BoardPageProps['t']
   onMove: (id: string, status: BoardCardView['status']) => void
@@ -545,6 +591,7 @@ function Card(props: {
   const { card, t, onMove, onRemove, onOpenSession } = props
   const [statusOpen, setStatusOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
   // Menu renders its own check for selectedId — no per-item icon here, or the
   // selected row would show two checks.
   const statusItems = STATUSES.map(status => ({
@@ -556,19 +603,38 @@ function Card(props: {
     [t('fieldRationale'), card.rationale],
     [t('fieldRejected'), card.rejected],
   ]
+  const openDetail = useCallback((): void => setDetailOpen(true), [])
   return (
     <article className="kb-card" data-card-id={card.id}>
-      <h4 className="kb-card-title">{card.title}</h4>
-      {card.description !== undefined && <p className="kb-card-desc">{card.description}</p>}
-      {fields.some(([, value]) => value !== undefined) && (
-        <div className="kb-card-fields">
-          {fields.map(([label, value]) => value !== undefined && value !== '' && (
-            <p key={label} className="kb-card-field">
-              <span className="kb-card-field-label">{label}:</span> {value}
-            </p>
-          ))}
-        </div>
-      )}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={t('detailHint')}
+        aria-haspopup="dialog"
+        className="kb-card-hit"
+        onClick={openDetail}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            openDetail()
+          }
+        }}
+      >
+        <h4 className="kb-card-title">
+          <span className="kb-card-title-text">{card.title}</span>
+          <IconInspectOutline12 className="kb-card-detail-icon" />
+        </h4>
+        {card.description !== undefined && <p className="kb-card-desc">{card.description}</p>}
+        {fields.some(([, value]) => value !== undefined) && (
+          <div className="kb-card-fields">
+            {fields.map(([label, value]) => value !== undefined && value !== '' && (
+              <p key={label} className="kb-card-field">
+                <span className="kb-card-field-label">{label}:</span> {value}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="kb-card-actions">
         {card.tags.length > 0 && (
           <div className="kb-card-meta">
@@ -644,22 +710,120 @@ function Card(props: {
           </>
         )}
       />
+      <CardDetail
+        card={card}
+        t={t}
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        onOpenSession={onOpenSession}
+      />
     </article>
+  )
+})
+
+/**
+ * The card detail dialog: a reading-friendly, pre-formatted view of one card.
+ * Shows the title with status/tags, then the description and each of the three
+ * what/why/rejected fields as labeled sections with full (newline-preserving)
+ * content, plus the source session and created/updated times. Headless modal —
+ * the plugin owns its header chrome so the body can scroll independently.
+ */
+function CardDetail(props: {
+  card: BoardCardView
+  t: BoardPageProps['t']
+  open: boolean
+  onClose: () => void
+  onOpenSession?: (sessionId: string) => void
+}) {
+  const { card, t, open, onClose, onOpenSession } = props
+  const sections: Array<{ label: string; value?: string; icon: ReactNode }> = [
+    { label: t('fieldSummary'), value: card.summary, icon: <IconGoalOutline16 /> },
+    { label: t('fieldRationale'), value: card.rationale, icon: <IconThinkOutline16 /> },
+    { label: t('fieldRejected'), value: card.rejected, icon: <IconWarningOutline16 /> },
+  ]
+  const present = sections.filter(section => section.value !== undefined && section.value !== '')
+  const hasDescription = card.description !== undefined && card.description !== ''
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={card.title}
+      closeLabel={t('close')}
+      headless
+      className="kb-detail-modal"
+    >
+      <div className="kb-detail">
+        <div className="kb-detail-head">
+          <div className="kb-detail-head-text">
+            <h2 className="kb-detail-title">{card.title}</h2>
+            <div className="kb-detail-meta">
+              <span className="kb-detail-status">
+                <span className={`kb-dot kb-dot-${card.status}`} />
+                {statusLabel(card.status, t)}
+              </span>
+              {card.tags.map(tag => <Pill key={tag} active>{tag}</Pill>)}
+            </div>
+          </div>
+          <button type="button" className="kb-detail-close" aria-label={t('close')} onClick={onClose}>
+            <IconCloseOutline16 size={14} />
+          </button>
+        </div>
+        <div className="kb-detail-scroll">
+          {hasDescription && (
+            <section className="kb-detail-block">
+              <div className="kb-detail-block-label"><IconListPenOutline16 />{t('fieldDescription')}</div>
+              <p className="kb-detail-block-body">{card.description}</p>
+            </section>
+          )}
+          {present.map(section => (
+            <section key={section.label} className="kb-detail-block">
+              <div className="kb-detail-block-label">{section.icon}{section.label}</div>
+              <p className="kb-detail-block-body">{section.value}</p>
+            </section>
+          ))}
+          {!hasDescription && present.length === 0 && (
+            <p className="kb-detail-empty">{t('detailEmpty')}</p>
+          )}
+          <div className="kb-detail-foot">
+            {card.sourceSessionId !== undefined && onOpenSession !== undefined && (
+              <button
+                type="button"
+                className="kb-source-btn"
+                onClick={() => onOpenSession(card.sourceSessionId as string)}
+              >
+                <IconQueueOutline14 />
+                <span>{t('sourceSession')}</span>
+              </button>
+            )}
+            <span className="kb-detail-times">
+              {t('detailCreated', { time: formatTime(card.createdAt) })}
+              {card.updatedAt !== card.createdAt && ` · ${t('detailUpdated', { time: formatTime(card.updatedAt) })}`}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
 /** Shared header strip of the overlay (native DSH ghost buttons). */
 function BoardHeader(props: {
   onClose: () => void
-  t: (key: BoardKey) => string
+  t: BoardPageProps['t']
   path?: string
+  lastUpdated?: number
   onRefresh?: () => void
 }) {
   return (
     <header className="kb-header">
       <div>
         <h2 className="kb-header-title">{props.t('title')}</h2>
-        {props.path !== undefined && <p className="kb-header-sub">{props.t('pathLabel')}: {props.path}</p>}
+        {props.path !== undefined && (
+          <p className="kb-header-sub">
+            {props.t('pathLabel')}: {props.path}
+            {props.lastUpdated !== undefined && <> · {props.t('autoUpdatedAt', { time: formatTimeWithSeconds(props.lastUpdated) })}</>}
+          </p>
+        )}
       </div>
       <div className="kb-header-spacer" />
       {props.onRefresh !== undefined && (
