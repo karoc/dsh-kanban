@@ -114,13 +114,29 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS) as (key: BoardKey, params?: Record<string, unknown>) => string
 
   // Sidebar badge: poll the current workspace's open-item count so the
-  // 「看板」 entry shows how many cards are open. Workspace source: the
-  // workspaces feed's most-recent workspace (more reliable than the current
-  // session, which can be undefined before a session is selected). Also
-  // subscribes to workspace-list changes so the badge appears as soon as data
-  // is ready (not after the first 30s poll). Stops on plugin teardown.
+  // 「看板」 entry shows how many cards are open. The workspace source is the
+  // CURRENT session's cwd (same rule the board page uses to pick its
+  // workspace), falling back to the workspaces feed's most-recent workspace —
+  // NOT recentWorkspaceId outright: that feed projects "the workspace with
+  // the most recently updated session", which can stay pinned to a different
+  // workspace after the user switches, so the badge would keep showing the
+  // wrong count. Also subscribes to both the session list (what actually
+  // changes on a workspace switch) and the workspace list so the badge
+  // follows the switch immediately instead of after the next poll interval.
+  // Stops on plugin teardown.
   ctx.effect(() => {
     const stop = startCountsPolling(() => {
+      const sessions = ctx.get('sessions') as
+        | { list?: { getSnapshot: () => { current?: string; byId?: Record<string, { cwd?: string }> } } }
+        | undefined
+      try {
+        const sessionState = sessions?.list?.getSnapshot()
+        const currentId = sessionState?.current
+        const currentCwd = currentId === undefined ? undefined : sessionState?.byId?.[currentId]?.cwd
+        if (currentCwd !== undefined && currentCwd !== '') return currentCwd
+      } catch {
+        // Fall through to the workspace feed.
+      }
       const workspaces = ctx.get('workspaces') as
         | { list?: { getSnapshot: () => { items?: ReadonlyArray<{ workspaceId: string; path: string }>; recentWorkspaceId?: string } } }
         | undefined
@@ -133,11 +149,15 @@ export function apply(ctx: ClientContext): void {
         return undefined
       }
     })
+    const sessions = ctx.get('sessions') as
+      | { list?: { subscribe: (fn: () => void) => () => void } }
+      | undefined
     const workspaces = ctx.get('workspaces') as
       | { list?: { subscribe: (fn: () => void) => () => void } }
       | undefined
-    const unsubscribe = workspaces?.list?.subscribe(triggerCountsPoll)
-    return () => { stop(); unsubscribe?.() }
+    const unsubscribeSessions = sessions?.list?.subscribe(triggerCountsPoll)
+    const unsubscribeWorkspaces = workspaces?.list?.subscribe(triggerCountsPoll)
+    return () => { stop(); unsubscribeSessions?.(); unsubscribeWorkspaces?.() }
   }, 'dsh-kanban: counts polling')
 
   // Sidebar footer action: the "看板" entry that opens the page.
