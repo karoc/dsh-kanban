@@ -54,6 +54,7 @@ export const en = {
   detailUpdated: 'Updated {time}',
   detailEmpty: 'No further details on this card.',
   autoUpdatedAt: 'auto-refreshed {time}',
+  missingFields: 'missing: {fields}',
 }
 
 /** The board page copy key set. */
@@ -113,4 +114,5 @@ export const zh: { [Key in keyof typeof en]: string } = {
   detailUpdated: '更新于 {time}',
   detailEmpty: '这张卡片没有更多详情。',
   autoUpdatedAt: '自动更新于 {time}',
+  missingFields: '缺字段：{fields}',
 }

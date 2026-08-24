@@ -36,12 +36,31 @@
 - 每轮开发此项目：先 board_list → 更新看板 → 结束前更新状态。
 - 已落实：看板开放项只保留真实待办（当前仅「待办-发 v0.1.2」），过时卡已收尾。
 
+### F. 卡片完整度（三字段纪律）—— ✅ 已实现（2026-08-23）
+- 症状：很多会话开始时会建卡，但卡片不完整——只有标题，或有 summary 而无 rationale/rejected。下个会话看不懂"为什么"和"放弃了什么"。
+- 根因：系统提示从未点名三字段（创建只说 title/status/tags，收尾只说 update summaries）；schema 全 Optional + "可选"措辞；无反馈回路（缺字段也"成功"）；用户侧不可见。
+- 修复（确定性杠杆，每会话必生效）：
+  1. `BOARD_GUIDANCE` 重写：创建=title+rationale(为什么) 必写、rejected 有取舍决策就写、summary 完成时写；收尾=done 三字段齐备才关闭；工具输出/会话注入/Web 页同步标注缺字段。
+  2. 共享判定 `missingCardFields`（board-core.ts）：每卡必须 rationale；done 卡必须 summary+rationale+rejected。工具 render、`/kanban` 命令、会话注入、Web 页（.kb-card-missing 警告行）、审计脚本全部同一规则。
+  3. 反馈回路：`board_add`/`board_update` 返回里缺字段卡片行尾标 `⚠️缺:为什么,…`，另有汇总提示行；会话开始注入对缺 rationale 的开放项标 `(缺:为什么)`。
+  4. 验证：`scripts/check-card-discipline.mjs`（静态门禁，断言引导/工具描述/共享谓词/技能口径一致，进 `pnpm test`）+ `scripts/audit-cards.mjs`（KANBAN 完整度审计，可选 --fail 阻塞）。
+- 实测：audit-cards 在仓库根发现 1 张 done 卡（侧边栏角标修复）三字段缺失 → 已按 Agent Note 补齐（见 §收尾）。真机模型行为验证见 scripts/verify-guidance*（行为回归）。
+
+### G. kanban-use 技能（深度层，随插件维护）—— ✅ 已实现（2026-08-23）
+- 定位：系统提示写不下完整手册（语义/示例/模板）；技能是"按需加载的深度文档"，与插件同一仓库维护（`skills/kanban-use/SKILL.md`）。
+- 内容：三件套分工（todo_write/看板/Agent Note）、六字段语义表、好/坏卡对比、创建→推进→收尾流程、关闭检查清单（"下一会话不问人能答三问吗"）、模板速查。
+- 安装：`pnpm install:skill`（`scripts/install-skill.mjs`，默认 symlink `~/.agents/skills/kanban-use`，git 更新即生效；`--copy` 实体复制；目标已是实体目录时拒绝 symlink 以免毁数据）。
+- 一致性：`check-card-discipline.mjs` 断言 SKILL.md 前端名 `kanban-use`、六工具名、三字段中文语义齐全，且 `src/index.ts` 引导引用该技能。
+- **为什么不是"只做技能"**：技能加载靠模型自觉判断，创建卡片那一刻不可靠；流程强化（引导+反馈回路+注入标注）才是确定性主通道。技能解决的是"深度不足"，不是"会不会想起来"。二选一必然失败，混合是唯一正解。
+
 ## 建议的实施顺序（已全部完成）
 
 1. **A（自动注入）**：✅ 已实现。已验证 AssembleContext.agent 可由 dsh-agent 的 `declare module` 扩展拿到，`assembleContextFor(agent)` 每次装配传入 `{ agent, scope: agent }`。
 2. **D（收尾纪律）**：✅ 已实现。
 3. **C（角标）**：✅ 已实现。
 4. **B（节点引导强化）**：✅ 已并入 D。
+5. **F（卡片完整度）**：✅ 已实现（2026-08-23），见上。
+6. **G（kanban-use 技能）**：✅ 已实现（2026-08-23），见上。
 
 ## 待验证的技术点（已有结论）
 

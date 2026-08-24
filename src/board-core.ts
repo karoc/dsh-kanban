@@ -92,6 +92,43 @@ export function isBoardCard(value: unknown): value is BoardCard {
   return card.sourceSessionId === undefined || typeof card.sourceSessionId === 'string'
 }
 
+/** The three Agent-Note-style what/why/rejected fields of a card. */
+export type CardQualityField = 'summary' | 'rationale' | 'rejected'
+
+/**
+ * Short labels for the what/why/rejected fields, used by model-visible render
+ * (tool output, `/kanban` command, session-start snapshot). Chinese matches
+ * the Web board page's zh copy for the three fields.
+ */
+export const CARD_FIELD_LABELS: Record<CardQualityField, string> = {
+  summary: '做了什么',
+  rationale: '为什么',
+  rejected: '放弃了什么',
+}
+
+/**
+ * Which of the three what/why/rejected fields a card is missing under the
+ * card-completeness discipline:
+ *   - every card must carry rationale (why it exists and why now) — a
+ *     title-only card is incomplete;
+ *   - a done card must be self-explanatory for the next session: summary +
+ *     rationale + rejected all present.
+ * Open cards may legitimately lack summary (nothing done yet) and rejected
+ * (no alternative decision made yet), so only rationale is required while
+ * open. Returns missing field names in fixed order (rationale, summary,
+ * rejected). Shared by the tool render, the session-start snapshot, and the
+ * completeness audit so every surface applies the same rule.
+ */
+export function missingCardFields(card: Pick<BoardCard, 'status' | 'summary' | 'rationale' | 'rejected'>): CardQualityField[] {
+  const missing: CardQualityField[] = []
+  if (card.rationale === undefined || card.rationale.trim() === '') missing.push('rationale')
+  if (card.status === 'done') {
+    if (card.summary === undefined || card.summary.trim() === '') missing.push('summary')
+    if (card.rejected === undefined || card.rejected.trim() === '') missing.push('rejected')
+  }
+  return missing
+}
+
 /**
  * Read the board document for one workspace. A missing file yields the empty
  * board; a structurally invalid document throws (never silently repaired, so a

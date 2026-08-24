@@ -151,6 +151,32 @@ function formatTime(epochMs: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+/** The three Agent-Note-style what/why/rejected field names. */
+type CardQualityField = 'summary' | 'rationale' | 'rejected'
+
+/**
+ * Which of the three what/why/rejected fields a card is missing — a local
+ * mirror of the host's missingCardFields (kept here so the client bundle never
+ * imports the node-side board-core): every card needs rationale (why); a done
+ * card must carry all three so the next session can pick it up without asking.
+ */
+function missingCardFields(card: BoardCardView): CardQualityField[] {
+  const missing: CardQualityField[] = []
+  if (card.rationale === undefined || card.rationale.trim() === '') missing.push('rationale')
+  if (card.status === 'done') {
+    if (card.summary === undefined || card.summary.trim() === '') missing.push('summary')
+    if (card.rejected === undefined || card.rejected.trim() === '') missing.push('rejected')
+  }
+  return missing
+}
+
+/** Localized field label for a quality-field name. */
+function qualityFieldLabel(field: CardQualityField, t: BoardPageProps['t']): string {
+  if (field === 'summary') return t('fieldSummary')
+  if (field === 'rationale') return t('fieldRationale')
+  return t('fieldRejected')
+}
+
 /** Second-resolution timestamp for the header's live auto-refresh indicator. */
 function formatTimeWithSeconds(epochMs: number): string {
   const date = new Date(epochMs)
@@ -603,6 +629,9 @@ const Card = memo(function Card(props: {
     [t('fieldRationale'), card.rationale],
     [t('fieldRejected'), card.rejected],
   ]
+  // Card completeness: every card needs why; a done card needs all three
+  // what/why/rejected fields (same rule as the host's missingCardFields).
+  const missing = missingCardFields(card)
   const openDetail = useCallback((): void => setDetailOpen(true), [])
   return (
     <article className="kb-card" data-card-id={card.id}>
@@ -633,6 +662,14 @@ const Card = memo(function Card(props: {
               </p>
             ))}
           </div>
+        )}
+        {missing.length > 0 && (
+          <p className="kb-card-missing">
+            <IconWarningOutline16 />
+            {t('missingFields', {
+              fields: missing.map(field => qualityFieldLabel(field, t)).join('、'),
+            })}
+          </p>
         )}
       </div>
       <div className="kb-card-actions">

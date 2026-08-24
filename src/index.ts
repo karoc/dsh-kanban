@@ -38,7 +38,9 @@ import type {} from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView } from '@deepseek-ai/dsh-tools'
 import {
+  CARD_FIELD_LABELS,
   addCard,
+  missingCardFields,
   readBoard,
   readBoardSync,
   removeCard,
@@ -156,20 +158,31 @@ const BOARD_OUTPUT = {
       },
     },
   } as const,
-  render: (_args: unknown, value: BoardToolValue) => [
-    {
-      type: 'text' as const,
-      text: [
-        `Board at ${value.path}`,
-        ...value.cards.map(card =>
-          `- [${card.status}] ${card.title}${card.tags.length > 0 ? ` ${card.tags.map(t => `#${t}`).join(' ')}` : ''}`),
-        ...value.cards.length === 0 ? ['(no cards yet)'] : [],
-        ...value.archived !== undefined
-          ? [`Archived ${value.archived.count} done card(s) to ${value.archived.path}`]
-          : [],
-      ].join('\n'),
-    },
-  ],
+  render: (_args: unknown, value: BoardToolValue) => {
+    const incomplete = value.cards.filter(card => missingCardFields(card).length > 0).length
+    return [
+      {
+        type: 'text' as const,
+        text: [
+          `Board at ${value.path}`,
+          ...value.cards.map(card => {
+            const missing = missingCardFields(card)
+            const mark = missing.length > 0
+              ? ` ⚠️缺:${missing.map(field => CARD_FIELD_LABELS[field]).join(',')}`
+              : ''
+            return `- [${card.status}] ${card.title}${card.tags.length > 0 ? ` ${card.tags.map(t => `#${t}`).join(' ')}` : ''}${mark}`
+          }),
+          ...value.cards.length === 0 ? ['(no cards yet)'] : [],
+          ...incomplete > 0
+            ? [`⚠️ ${incomplete} card(s) missing fields — fill the flagged 为什么 (why), and for done cards 做了什么 (what) + 放弃了什么 (rejected), when you can.`]
+            : [],
+          ...value.archived !== undefined
+            ? [`Archived ${value.archived.count} done card(s) to ${value.archived.path}`]
+            : [],
+        ].join('\n'),
+      },
+    ]
+  },
 }
 
 /** Resolve the workspace root for a tool call: the owning session's cwd. */
@@ -188,25 +201,46 @@ function present(title: string, kind: 'read' | 'other', rawInput?: unknown): Gen
  * The system-prompt guidance that tells the model to actually USE the board
  * and to keep Agent Notes for non-trivial changes. This is what makes it an
  * active maintenance habit instead of a passive tool: record plans as they
- * appear, move cards as work progresses, close them when done — across
- * sessions — and write a durable decision note for every non-trivial change.
+ * appear with complete cards, move cards as work progresses, close them with
+ * the full what/why/rejected story when done — across sessions — and write a
+ * durable decision note for every non-trivial change.
+ *
+ * Card completeness is part of the contract, not a bonus: every card needs a
+ * rationale (why) at creation, rejected alternatives when a decision was made,
+ * and a done card must carry summary + rationale + rejected so the next
+ * session can pick the work up without asking. Tool outputs and the
+ * session-start snapshot flag cards missing fields (缺), giving the model an
+ * immediate feedback loop; the deep card-writing manual lives in the
+ * kanban-use skill, which this section points at when available.
  */
 const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) backed by '
   + 'KANBAN.json at the workspace root — it survives session switches and branches, and it '
   + 'is shared with the Web "看板" page. Use it to track plans and todos that should outlive '
-  + 'the current turn: when the user states a multi-step plan or a list of tasks, record each '
-  + 'step with board_add (title; status todo; tags for grouping). As work progresses, move '
-  + 'cards with board_update (status in_progress → done); when a card is finished or '
-  + 'superseded, mark it done or remove it. Prefer the board over todo_write for anything the '
-  + 'user should still see after switching branches or opening a new session: todo_write is '
-  + 'the transient in-turn task list, while the board is the durable cross-session record. '
-  + 'Check board_list when resuming work in a workspace to pick up what was planned before.\n\n'
+  + 'the current turn. Record each step with board_add (title + rationale (为什么 — why this '
+  + 'task exists and why now); rejected (放弃了什么) when a decision ruled out an '
+  + 'alternative; tags for grouping; summary (做了什么) is filled when the work is done). '
+  + 'Write complete cards, not just titles: a title-only card is an incomplete card, because '
+  + 'the next session must understand why it exists and what was decided against without '
+  + 'asking. Cards missing fields are flagged (缺) in tool outputs and in the session-start '
+  + 'snapshot — fill them when you can.\n\n'
+  + 'As work progresses, move cards with board_update (status in_progress → done), adding '
+  + 'rationale/rejected information as decisions are made; when a card is finished or '
+  + 'superseded, mark it done or remove it. Prefer the board over todo_write for anything '
+  + 'the user should still see after switching branches or opening a new session: todo_write '
+  + 'is the transient in-turn task list, while the board is the durable cross-session '
+  + 'record. Check board_list when resuming work in a workspace to pick up what was planned '
+  + 'before.\n\n'
   + 'Close the loop at the end of every work session: when the user\'s request is done or '
   + 'reaches a clear stopping point, update the board to reflect reality — move completed '
-  + 'cards to done, add any new follow-up as a todo card, and update summaries with what was '
-  + 'actually done. Do not leave cards in stale states (e.g. in_progress with no work left); '
-  + 'the board must be an honest hand-off for the next session, not a backlog that drifts. '
-  + 'This wrap-up is what makes the board a durable memory across sessions.\n\n'
+  + 'cards to done, add any new follow-up as a todo card, and make every done card '
+  + 'self-explanatory with all three fields: summary (做了什么 — what was actually done), '
+  + 'rationale (为什么 — why it was done), and rejected (放弃了什么 — what was tried or '
+  + 'considered and given up, with why). Do not leave cards in stale states (e.g. '
+  + 'in_progress with no work left) and do not close a card without its three fields — the '
+  + 'board must be an honest hand-off for the next session, not a backlog that drifts. This '
+  + 'wrap-up is what makes the board a durable memory across sessions.\n\n'
+  + 'The full card-writing discipline (field semantics, examples, good/bad cards, '
+  + 'templates) lives in the kanban-use skill — load it when it is available.\n\n'
   + 'You also maintain Agent Notes (the note_add / note_list tools) at '
   + '.agents/notes/implemented/<class>/<date>-<topic>.md, mirroring the DeepSeek Harness '
   + `repository discipline. ${DEFAULT_NON_TRIVIAL_DEFINITION} `
@@ -244,9 +278,17 @@ function boardSnapshotText(context: { agent?: { session: { header: { cwd?: strin
   const lines = open.map(card => {
     const tags = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''
     const status = card.status === 'in_progress' ? ' (in progress)' : ''
-    return `- [${card.status}] ${card.title}${status}${tags}`
+    const missing = missingCardFields(card)
+    const missingNote = missing.length > 0
+      ? ` (缺:${missing.map(field => CARD_FIELD_LABELS[field]).join(',')})`
+      : ''
+    return `- [${card.status}] ${card.title}${status}${tags}${missingNote}`
   })
-  return 'Current workspace board (KANBAN.json) — open items:\n' + lines.join('\n')
+  const incomplete = open.filter(card => missingCardFields(card).length > 0).length
+  const tail = incomplete > 0
+    ? ['', `${incomplete} open card(s) are missing fields (缺) — fill the flagged 为什么 (and other fields) when you pick the work up.`]
+    : []
+  return 'Current workspace board (KANBAN.json) — open items:\n' + [...lines, ...tail].join('\n')
 }
 
 /** Execute the human `/kanban` command against the receiving agent's workspace. */
@@ -297,8 +339,13 @@ function renderBoardResult(heading: string | undefined, view: BoardView): Comman
   const lines = [
     ...heading !== undefined ? [heading] : [],
     `Board at ${view.path}`,
-    ...view.cards.map(card =>
-      `- [${card.status}] ${card.title}${card.tags.length > 0 ? ` ${card.tags.map(t => `#${t}`).join(' ')}` : ''}`),
+    ...view.cards.map(card => {
+      const missing = missingCardFields(card)
+      const mark = missing.length > 0
+        ? ` ⚠️缺:${missing.map(field => CARD_FIELD_LABELS[field]).join(',')}`
+        : ''
+      return `- [${card.status}] ${card.title}${card.tags.length > 0 ? ` ${card.tags.map(t => `#${t}`).join(' ')}` : ''}${mark}`
+    }),
     ...view.cards.length === 0 ? ['(no cards yet)'] : [],
   ]
   return { kind: 'success', text: lines.join('\n') }
@@ -484,7 +531,9 @@ export function apply(ctx: Context): void {
     name: 'board_add',
     description: 'Add a card to the current workspace kanban board. Use it to persist a plan step or todo so it '
       + 'survives session switches and shows up on the Web board page. When the user states a multi-step plan or a '
-      + 'list of tasks, record each concrete step here. The board lives at KANBAN.json in the workspace root.',
+      + 'list of tasks, record each concrete step here. Every card needs a rationale (为什么 — why it exists and '
+      + 'why now) at creation — a title-only card is incomplete and is flagged as 缺 in the output; record rejected '
+      + 'alternatives (放弃了什么) when a decision ruled one out. The board lives at KANBAN.json in the workspace root.',
     parameters: {
       title: {
         type: 'string',
@@ -497,15 +546,15 @@ export function apply(ctx: Context): void {
       },
       summary: {
         type: 'string',
-        description: 'Optional: what was done (Agent-Note style).',
+        description: 'What was done — fill when the work is complete (Agent-Note style "what"; 做了什么).',
       },
       rationale: {
         type: 'string',
-        description: 'Optional: why it was done (Agent-Note style).',
+        description: 'Why this card exists and why now — expected on every card (Agent-Note style "why"; 为什么).',
       },
       rejected: {
         type: 'string',
-        description: 'Optional: what was rejected or given up (Agent-Note style).',
+        description: 'What was tried or considered and given up, with why — write when a decision ruled out an alternative (Agent-Note style "rejected"; 放弃了什么).',
       },
       status: {
         type: 'string',
@@ -539,6 +588,8 @@ export function apply(ctx: Context): void {
     name: 'board_update',
     description: 'Update one card on the current workspace kanban board by its exact id. '
       + 'Use it to move a card between todo / in_progress / done, or to edit its title, description, or tags. '
+      + 'When moving a card to done, make it self-explanatory with all three fields: summary (做了什么) + '
+      + 'rationale (为什么) + rejected (放弃了什么). A done card missing fields is flagged as 缺 in the output. '
       + 'Call board_list first to get the id.',
     parameters: {
       id: {

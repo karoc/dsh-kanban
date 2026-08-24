@@ -46,8 +46,8 @@
 | ⚠️ 取舍 | 这是"主动给" vs "被动查"的权衡——系统注入保证可见，代价是每次请求的额外负担 |
 
 **模型怎么"用起来"的完整机制：**
-1. **看板使用指引**（`ctx.systemPrompt.section`）：告诉模型"看板是什么、何时该记、和 todo_write 的分工"。
-2. **会话开始自动注入**（`ctx.systemPrompt.context`）：未完成项摘要自动进模型上下文（见上）。
+1. **看板使用指引**（`ctx.systemPrompt.section`）：告诉模型"看板是什么、何时该记、和 todo_write 的分工"，以及**卡片完整度契约**——每张卡必须有 rationale（为什么，创建时写）；done 卡必须三字段（做了什么/为什么/放弃了什么）齐备。
+2. **会话开始自动注入**（`ctx.systemPrompt.context`）：未完成项摘要自动进模型上下文（见上）；缺字段的卡会带 `(缺:…)` 标注，接手的会话看到就能补。
 3. **收尾纪律**：指引明确要求——**每轮工作结束**，模型必须把完成项移到 done、把新后续加为 todo、更新 summaries，**不留 stale 的 in_progress**，让看板成为诚实的跨会话交接。
 4. **用户侧可见性**：侧边栏「看板」入口显示**未完成计数角标**（`/kanban/counts` 端点，工作区最近活跃优先，订阅工作区变更即时刷新）；看板页打开时**每 15s 自动刷新**，模型/其他会话写入后自动更新。
 
@@ -58,7 +58,7 @@
 | 工具 | 作用 |
 |---|---|
 | `board_list` | 读取当前工作区的看板（全部卡片 + 状态 + 标签 + 时间戳）。任何更新前先读它拿真实 id。 |
-| `board_add` | 新增一张卡片（title 必填，可带 summary/做了什么、rationale/为什么、rejected/放弃了什么、description、status、tags）。 |
+| `board_add` | 新增一张卡片（title + **rationale/为什么 每张卡都应写**——只有标题是不完整卡，会被标注 ⚠️缺；有取舍决策时写 rejected/放弃了什么；summary/做了什么 完成时写；可带 description、status、tags）。 |
 | `board_update` | 更新卡片（按 id，可改 status / title / summary / rationale / rejected / description / tags）。 |
 | `board_remove` | 删除卡片（按 id）。 |
 | `note_add` | 写一份 Agent Note（完整复刻 DSH 仓库纪律），存到 `.agents/notes/implemented/<class>/<date>-<topic>.md`。 |
@@ -174,20 +174,44 @@ dsh plugin --profile web remove dsh-kanban   # 同时移除依赖和 bundle 层�
 3. 随时点侧边栏「看板」查看三列视图；勾选完成 / 改状态 / 新增 / 删除都可以在页面上直接做；
 4. 换分支、开新会话后，看板数据依然在——它就是工作区里的一个文件。
 
+## 卡片完整度与 kanban-use 技能
+
+卡片是看板跨会话记忆的载体：下一个会话**不问你**，只看卡片。因此插件在模型能看到的每个表面都强制执行同一份完整度契约（规则统一在 `board-core.ts` 的 `missingCardFields`）：
+
+- **每张卡必须有 `rationale`（为什么）**——为什么存在、为什么现在做。只有标题的卡是不完整卡，会在三处被标注：
+  - **工具输出**（卡片行后 `⚠️缺:…`，有缺字段时还有汇总提示行）；
+  - **会话开始注入**（开放项带 `(缺:…)`，恢复会话时模型可见、可补）；
+  - **Web 看板页**（卡片字段下方黄色警告行「缺字段：…」，用户侧同样可见）。
+- **`done` 卡片必须自解释**：`summary`（做了什么）+ `rationale`（为什么）+ `rejected`（放弃了什么）三字段齐备，完成的活才是诚实的交接。
+
+**kanban-use 技能**（`skills/kanban-use/SKILL.md`）是这套纪律的深度手册——字段语义、好/坏卡片对比、创建 → 推进 → 收尾全流程、关闭检查清单与模板。系统提示引导会把模型指向它；安装一次，会话即可按需加载：
+
+```sh
+pnpm install:skill            # symlink skills/kanban-use → ~/.agents/skills/kanban-use
+# 或：node scripts/install-skill.mjs --copy   （改为实体复制）
+```
+
+技能**与本插件同一仓库维护**：开发/发布门禁（`pnpm check:cards` → `scripts/check-card-discipline.mjs`）保证技能里教的字段语义与工具名和插件 schema 一致；`scripts/audit-cards.mjs <workspace> [--fail]` 可审计任意工作区 `KANBAN.json` 的卡片完整度。
+
 ## 目录结构
 
 ```
 cordis.patch.yml      # bundle 层：挂载本包（Host 工具 + client 半区）
 package.json          # dsh.bundle（patch）+ dsh.client（web）+ exports["./client"]
 tsdown.config.ts      # 自包含构建：node 半区 + 模块表客户端 bundle
-src/board-core.ts     # KANBAN.json 领域：读写、校验、卡片 CRUD（Host 与路由共享）
+src/board-core.ts     # KANBAN.json 领域：读写、校验、卡片 CRUD、
+                      #   missingCardFields 完整度规则（全表面共享）
 src/index.ts          # Host 半区：4 个模型工具 + /kanban/api webServer 路由
 src/client/index.ts   # client apply：注册侧边栏入口 + 全屏看板页
-src/client/BoardPage.tsx   # 三列看板页组件
+src/client/BoardPage.tsx   # 三列看板页组件（含缺字段提示行）
 src/client/KanbanSurface.tsx # 侧边栏按钮 + overlay 包装
 src/client/board-state.ts   # 页面开关的模块级 observable
 src/client/locales.ts       # 中英文案
 src/client/styles.ts        # --dsw-alias-* 设计令牌样式
+skills/kanban-use/SKILL.md  # kanban-use 技能（pnpm install:skill 安装）
+scripts/check-card-discipline.mjs # 开发门禁：引导/schema/技能对完整度口径一致
+scripts/audit-cards.mjs          # KANBAN.json 完整度审计（[workspace] [--fail]）
+scripts/install-skill.mjs        # 把技能 symlink/复制进 ~/.agents/skills
 ```
 
 ## 为什么做成外部插件

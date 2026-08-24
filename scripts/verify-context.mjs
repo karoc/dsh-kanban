@@ -47,8 +47,9 @@ const assembly = await ctx.systemPrompt.assemble({
 })
 const contextText = assembly.contexts.map(c => c.text).join('\n')
 console.log('contexts:', assembly.contexts.map(c => c.name).join(', '))
-const hasSnapshot = contextText.includes('open items') && contextText.includes('实现方案A') && !contextText.includes('已完成的卡')
-console.log('injects open items (not done):', hasSnapshot)
+const hasSnapshot = contextText.includes('open items') && contextText.includes('实现方案A')
+  && contextText.includes('缺:为什么') && !contextText.includes('已完成的卡')
+console.log('injects open items (not done) with missing-field marks:', hasSnapshot)
 console.log('--- snapshot text ---')
 console.log(contextText.split('open items')[1] ?? '(none)')
 

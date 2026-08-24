@@ -187,6 +187,16 @@ export const KANBAN_STYLES = `
   overflow: hidden;
 }
 .kb-card-field-label { color: var(--dsw-alias-label-tertiary); font-weight: 600; }
+/* Incomplete-card hint: a card missing rationale (or a done card missing any
+   of the three what/why/rejected fields) shows a warning line under the
+   fields — same rule as the host's missingCardFields, so the Web page and the
+   model-facing surfaces agree on what "incomplete" means. */
+.kb-card-missing {
+  margin: 0; font-size: 12px; line-height: 18px;
+  display: flex; align-items: center; gap: 5px;
+  color: var(--dsw-alias-state-warn-primary);
+}
+.kb-card-missing svg { flex: none; color: var(--dsw-alias-state-warn-primary); }
 .kb-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 /* Card footer: tags on their own line, then one action row holding
    [source-session][status] ... [delete pinned right]. */

@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Two-line clamped card fields**: each of the three what/why/rejected fields
   on a card preview now clamps to at most two lines with an ellipsis
   (`-webkit-line-clamp: 2`), keeping cards compact and scannable.
+- **Card-completeness discipline (the three what/why/rejected fields are now
+  part of the contract, not a bonus)**:
+  - system-prompt guidance rewritten: creation = title + `rationale` (为什么)
+    expected on every card, `rejected` (放弃了什么) when a decision ruled out
+    an alternative, `summary` (做了什么) filled at completion; closing a card
+    requires all three fields — a done card must be self-explanatory for the
+    next session;
+  - the shared predicate `missingCardFields` (board-core.ts) applies ONE rule
+    everywhere: every card needs rationale; a done card needs summary +
+    rationale + rejected;
+  - model-visible feedback loop: board tool outputs and the `/kanban` command
+    flag incomplete cards (`⚠️缺:…` per card plus a summary line), and the
+    session-start snapshot marks open cards missing rationale (`(缺:…)`) so a
+    resuming session can fill them;
+  - the Web board page shows a warning line (`缺字段：…`) under any card
+    missing fields, so incompleteness is visible to humans too;
+  - `board_add` / `board_update` tool descriptions now state the rule instead
+    of "optional" framing.
 
 ### Added
 
@@ -29,6 +47,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   full, newline-preserving content in labeled sections with icons, a status
   badge + tag pills, the source-session jump button, and created/updated
   timestamps — a formatted, reading-friendly view of the whole card.
+- **The kanban-use skill, maintained in this repository**: `skills/kanban-use/SKILL.md`
+  is the deep manual for the card-completeness discipline (field semantics,
+  good/bad card examples, create → advance → close flow, close checklist,
+  templates). The system-prompt guidance points the model at it; `pnpm install:skill`
+  (`scripts/install-skill.mjs`) symlinks/copies it into `~/.agents/skills/kanban-use`
+  so sessions can load it on demand. The new dev gate `pnpm check:cards`
+  (`scripts/check-card-discipline.mjs`, part of `pnpm test`) asserts the skill's
+  field semantics and tool names stay consistent with the plugin schema;
+  `scripts/audit-cards.mjs <workspace> [--fail]` audits any workspace's
+  `KANBAN.json` for incomplete cards under the same rule.
 
 ### Fixed
 
