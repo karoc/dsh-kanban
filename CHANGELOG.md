@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with different content = a user edit (kept, warned); older/absent version =
   stale package content (synced over). Users who customize the skill keep
   their edits safe by bumping the fingerprint themselves.
+- **Delivery-manifest integrity at the gates**: `release-check` now verifies
+  every `package.json` `files` entry exists in the tree (7b), and
+  `check-card-discipline` asserts the skill and its installer are registered
+  in `files` — an asset outside the manifest never ships to npm users, so
+  this class of gap (e.g. the skill missing from the tarball pre-0.2.1) is
+  now caught at development/release time instead of by users.
 
 ## [0.2.0] - 2026-08-23
 

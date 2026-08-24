@@ -16,6 +16,8 @@
  *   5. git tag `v<version>` exists and points at HEAD
  *   6. git working tree is clean (everything committed)
  *   7. lib/ is present AND fresh (no src/ file newer than the built output)
+ *   7b. every package.json "files" entry exists in the tree (delivery-manifest
+ *       integrity — an asset outside the whitelist never ships to npm users)
  *   8. version is not already published on npm (direct registry probe; only
  *      an explicit 200 blocks — 404/offline are "not published yet")
  *
@@ -160,6 +162,19 @@ if (existsSync(join(root, 'src'))) {
 }
 if (stale.length > 0) {
   fail(`build output is stale (src/ newer than ${stale.join(', ')}) — run pnpm bundle first`)
+}
+
+// 7b. delivery-manifest integrity: every entry in package.json "files" must
+// exist in the tree. Catches "new asset never registered in the manifest" at
+// release time instead of at user-install time (a file outside the whitelist
+// does not exist for npm users at all, e.g. the kanban-use skill pre-0.2.1).
+const files = JSON.parse(read('package.json')).files
+if (!Array.isArray(files)) {
+  fail('package.json "files" must be an array')
+} else {
+  for (const entry of files) {
+    if (!existsSync(join(root, entry))) fail(`package.json files entry "${entry}" does not exist in the tree — add the asset or remove the entry`)
+  }
 }
 
 // 8. not already published. Probes the npm registry directly (fetch — no npm

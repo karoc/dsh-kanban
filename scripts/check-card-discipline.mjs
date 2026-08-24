@@ -74,7 +74,17 @@ if (!existsSync(skillPath)) {
   }
 }
 
-// 5. The skill is installable (the installer script is part of the contract).
+// 5. The skill is installable (the installer script is part of the contract),
+//    and BOTH are registered in the npm delivery manifest — an asset outside
+//    package.json "files" does not exist for npm users at all (design-phase
+//    gate: "new asset must be in the tarball", see release-check 7b).
+const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
+const files = Array.isArray(pkg.files) ? pkg.files : []
+for (const shipped of ['skills/kanban-use/SKILL.md', 'scripts/install-skill.mjs']) {
+  if (!files.includes(shipped)) {
+    fail(`package.json "files" must include "${shipped}" — shipped assets outside the manifest are invisible to npm users`)
+  }
+}
 if (!existsSync(resolve(root, 'scripts', 'install-skill.mjs'))) {
   fail('scripts/install-skill.mjs is missing — the skill must be installable into ~/.agents/skills')
 }
