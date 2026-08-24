@@ -248,11 +248,11 @@ Cards are the board's cross-session memory: the next session reads them **withou
   - on the **Web board page** (a warning line `缺字段：…` under the card fields — humans see it too).
 - **A `done` card must be self-explanatory**: `summary` (做了什么) + `rationale` + `rejected` (放弃了什么) all present, so the completed work is an honest hand-off.
 
-**The kanban-use skill** (`skills/kanban-use/SKILL.md`) is the deep manual for this discipline — field semantics, good/bad card examples, the create → advance → close flow, a close checklist, and templates. The system-prompt guidance points the model at it; install it once so sessions can load it on demand:
+**The kanban-use skill** (`skills/kanban-use/SKILL.md`) is the deep manual for this discipline — field semantics, good/bad card examples, the create → advance → close flow, a close checklist, and templates. The system-prompt guidance points the model at it. **Installation is automatic**: the skill ships inside the npm package (the tarball includes `skills/kanban-use/SKILL.md` and `scripts/install-skill.mjs`), and the plugin's host half checks `~/.agents/skills/kanban-use/SKILL.md` on every `dsh web` start — missing → copies the shipped file in; identical → no-op; **different → your local copy is kept** (it may be your own edit) with a one-line hint. So `dsh plugin add/update dsh-kanban` + the required restart is all it takes, on any machine. The manual commands still exist for repo checkouts and forced syncs:
 
 ```sh
 pnpm install:skill            # symlinks skills/kanban-use → ~/.agents/skills/kanban-use
-# or: node scripts/install-skill.mjs --copy   (materialize a copy instead)
+node scripts/install-skill.mjs --copy   # materialize/overwrite a copy (works inside the installed package too)
 ```
 
 The skill is **maintained in this repository alongside the plugin** — the release/dev gates (`pnpm check:cards` → `scripts/check-card-discipline.mjs`) assert that the skill's field semantics and tool names stay consistent with the plugin's schema, and `scripts/audit-cards.mjs <workspace> [--fail]` reports incomplete cards in any workspace's `KANBAN.json`.
@@ -272,10 +272,12 @@ src/client/KanbanSurface.tsx   # sidebar button + overlay wrapper
 src/client/board-state.ts      # module-level page visibility observable
 src/client/locales.ts          # zh/en copy
 src/client/styles.ts           # --dsw-alias-* design-token styles
-skills/kanban-use/SKILL.md     # the kanban-use skill (installed via pnpm install:skill)
+src/skill-sync.ts              # host half: kanban-use skill self-heal install (on dsh web start)
+skills/kanban-use/SKILL.md     # the kanban-use skill (ships in the npm tarball; auto-installed)
 scripts/check-card-discipline.mjs # dev gate: guidance/schema/skill agree on completeness
 scripts/audit-cards.mjs          # KANBAN.json completeness audit ([workspace] [--fail])
-scripts/install-skill.mjs        # symlink/copy the skill into ~/.agents/skills
+scripts/install-skill.mjs        # symlink/copy the skill into ~/.agents/skills (shipped too)
+scripts/verify-skill-sync.mjs    # skill self-heal three-state verification (part of pnpm test)
 ```
 
 ## Why an external plugin

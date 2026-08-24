@@ -5,6 +5,22 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **kanban-use skill installs itself**: the skill and its installer now ship
+  inside the npm tarball (`skills/kanban-use/SKILL.md`,
+  `scripts/install-skill.mjs`), and the host half self-heals
+  `~/.agents/skills/kanban-use/SKILL.md` on every `dsh web` start — missing →
+  copies the shipped file; identical → no-op; differs → keeps the local copy
+  (user may have edited it) with a one-line hint. `dsh plugin add/update
+  dsh-kanban` + the required restart is all it takes now; the manual
+  `install:skill` commands remain for repo checkouts / forced syncs. The
+  self-heal runs as a module top-level side effect (a call inside `apply()`
+  alone was tree-shaken out of the bundle by rolldown — the documented §5
+  trap, this time on the node half).
+
 ## [0.2.0] - 2026-08-23
 
 ### Changed

@@ -48,6 +48,15 @@ import {
   type BoardStatus,
   type BoardView,
 } from './board-core.ts'
+// Side-effect import: keeps skill-sync alive against rolldown tree-shaking
+// (the self-heal runs as a module top-level side effect there) — a bare
+// import of the names was rolled out entirely.
+import './skill-sync.ts'
+import { ensureSkillInstalled, skillSourceFile, skillTargetFile } from './skill-sync.ts'
+
+// Exported for verification (scripts/verify-skill-sync.mjs) — the module
+// registry only loads lib/index.js; the bundle keeps these exports.
+export { ensureSkillInstalled, skillSourceFile, skillTargetFile }
 import {
   DEFAULT_NON_TRIVIAL_DEFINITION,
   DEFAULT_NOTE_CLASSES,
@@ -476,6 +485,11 @@ async function listAgentNotes(cwd: string): Promise<string[]> {
 
 /** Register the four model-facing board tools. */
 export function apply(ctx: Context): void {
+  // Skill self-heal: make sure the kanban-use skill (shipped in this package)
+  // is present under ~/.agents/skills — new installs, plugin updates, and new
+  // machines get it automatically on the restart that installs require.
+  // Fire-and-forget: failure only warns, never blocks plugin load.
+  void ensureSkillInstalled()
   // Tell the model when/why to use the board (tool-guidance range 100-199).
   ctx.systemPrompt.section({
     name: 'tool:board',

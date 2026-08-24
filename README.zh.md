@@ -184,11 +184,11 @@ dsh plugin --profile web remove dsh-kanban   # 同时移除依赖和 bundle 层�
   - **Web 看板页**（卡片字段下方黄色警告行「缺字段：…」，用户侧同样可见）。
 - **`done` 卡片必须自解释**：`summary`（做了什么）+ `rationale`（为什么）+ `rejected`（放弃了什么）三字段齐备，完成的活才是诚实的交接。
 
-**kanban-use 技能**（`skills/kanban-use/SKILL.md`）是这套纪律的深度手册——字段语义、好/坏卡片对比、创建 → 推进 → 收尾全流程、关闭检查清单与模板。系统提示引导会把模型指向它；安装一次，会话即可按需加载：
+**kanban-use 技能**（`skills/kanban-use/SKILL.md`）是这套纪律的深度手册——字段语义、好/坏卡片对比、创建 → 推进 → 收尾全流程、关闭检查清单与模板。系统提示引导会把模型指向它。**安装是自动的**：技能随 npm 包分发（tarball 内含 `skills/kanban-use/SKILL.md` 与 `scripts/install-skill.mjs`），插件 host 半区每次 `dsh web` 启动时检查 `~/.agents/skills/kanban-use/SKILL.md`——缺失 → 复制包内版本；一致 → 不动；**不一致 → 保留你的本地版本**（可能是你改过的），只打一行提示。所以「`dsh plugin add/update dsh-kanban` + 必需的重启」就够了，任何机器都生效。手动命令仍保留（仓库开发 / 强制同步）：
 
 ```sh
 pnpm install:skill            # symlink skills/kanban-use → ~/.agents/skills/kanban-use
-# 或：node scripts/install-skill.mjs --copy   （改为实体复制）
+node scripts/install-skill.mjs --copy   # 实体复制/覆盖（装在包内时同样可跑）
 ```
 
 技能**与本插件同一仓库维护**：开发/发布门禁（`pnpm check:cards` → `scripts/check-card-discipline.mjs`）保证技能里教的字段语义与工具名和插件 schema 一致；`scripts/audit-cards.mjs <workspace> [--fail]` 可审计任意工作区 `KANBAN.json` 的卡片完整度。
@@ -208,10 +208,12 @@ src/client/KanbanSurface.tsx # 侧边栏按钮 + overlay 包装
 src/client/board-state.ts   # 页面开关的模块级 observable
 src/client/locales.ts       # 中英文案
 src/client/styles.ts        # --dsw-alias-* 设计令牌样式
-skills/kanban-use/SKILL.md  # kanban-use 技能（pnpm install:skill 安装）
+src/skill-sync.ts           # Host 半区：kanban-use 技能自愈安装（每次 dsh web 启动检查）
+skills/kanban-use/SKILL.md  # kanban-use 技能（随 npm 包分发，启动时自动安装）
 scripts/check-card-discipline.mjs # 开发门禁：引导/schema/技能对完整度口径一致
 scripts/audit-cards.mjs          # KANBAN.json 完整度审计（[workspace] [--fail]）
-scripts/install-skill.mjs        # 把技能 symlink/复制进 ~/.agents/skills
+scripts/install-skill.mjs        # 把技能 symlink/复制进 ~/.agents/skills（随包分发）
+scripts/verify-skill-sync.mjs    # 技能自愈三态验证（并入 pnpm test）
 ```
 
 ## 为什么做成外部插件

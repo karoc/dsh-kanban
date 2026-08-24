@@ -21,7 +21,9 @@
     "README.zh.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
-    "LICENSE"
+    "LICENSE",
+    "skills/kanban-use/SKILL.md",
+    "scripts/install-skill.mjs"
   ],
   "dsh": {
     "bundle": {
@@ -45,7 +47,7 @@
     "bundle": "tsdown --config ./tsdown.config.ts",
     "prepare": "tsdown --config ./tsdown.config.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsc --noEmit && node --test scripts/board-core.spec.mjs && node scripts/check-card-discipline.mjs && node scripts/verify-tools.mjs && node scripts/verify-spec.mjs && node scripts/verify-context.mjs",
+    "test": "tsc --noEmit && node --test scripts/board-core.spec.mjs && node scripts/check-card-discipline.mjs && node scripts/verify-tools.mjs && node scripts/verify-spec.mjs && node scripts/verify-context.mjs && node scripts/verify-skill-sync.mjs",
     "check:spec": "node scripts/check-note-spec.mjs",
     "check:cards": "node scripts/check-card-discipline.mjs",
     "audit:cards": "node scripts/audit-cards.mjs",
