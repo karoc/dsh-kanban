@@ -16,7 +16,8 @@
  *   5. git tag `v<version>` exists and points at HEAD
  *   6. git working tree is clean (everything committed)
  *   7. lib/ is present AND fresh (no src/ file newer than the built output)
- *   8. version is not already published on npm (best effort)
+ *   8. version is not already published on npm (direct registry probe; only
+ *      an explicit 200 blocks — 404/offline are "not published yet")
  *
  * Known, documented limitations:
  *   - Section-count sync cannot verify translated CONTENT inside sections;
@@ -161,13 +162,26 @@ if (stale.length > 0) {
   fail(`build output is stale (src/ newer than ${stale.join(', ')}) — run pnpm bundle first`)
 }
 
-// 8. not already published (best effort; offline or 404 means not published).
+// 8. not already published. Probes the npm registry directly (fetch — no npm
+//    CLI subprocess, so no ~/.npm log side effects and no confusing stderr).
+//    Only an explicit 200 (version exists) blocks the release; 404, network
+//    failures and timeouts are all treated as "not published yet" and are
+//    reported in plain words instead of raw status codes.
 try {
   const packageName = JSON.parse(read('package.json')).name
-  const published = run(`npm view ${JSON.stringify(packageName)}@${version} version`)
-  if (published.length > 0) fail(`version ${version} is already published on npm (${published}) — bump the version`)
+  const probeUrl = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/${encodeURIComponent(version)}`
+  const response = await fetch(probeUrl, { signal: AbortSignal.timeout(10000) })
+  if (response.ok) {
+    const body = await response.json().catch(() => ({}))
+    const publishedVersion = typeof body?.version === 'string' ? body.version : version
+    fail(`version ${version} is already published on npm (${publishedVersion}) — bump the version`)
+  } else if (response.status === 404) {
+    console.log(`   registry: ${version} is NOT published yet — safe to publish`)
+  } else {
+    console.log(`   registry: probe returned HTTP ${response.status} — treating as "not published yet" (best effort)`)
+  }
 } catch {
-  // E404 or network failure: treated as "not published yet"
+  console.log('   registry: probe unavailable (offline/timeout) — treating as "not published yet" (best effort)')
 }
 
 if (failures.length > 0) {
