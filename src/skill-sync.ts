@@ -5,17 +5,23 @@
  * so `dsh plugin add/update dsh-kanban` puts the file on disk automatically.
  * But the AGENT skills directory (~/.agents/skills) is a per-machine local
  * asset that npm does NOT touch — so every dsh web start, this module makes
- * sure the skill is present there, mirroring the plugin's copy:
+ * sure the skill is present there, mirroring the plugin's copy.
+ *
+ * Sync policy (four states, driven by the `skill-version` fingerprint in the
+ * SKILL.md frontmatter — bump it whenever the skill CONTENT changes):
  *
  *   - target missing                      → copy the shipped SKILL.md in
- *   - target identical to the package copy → no-op (fast path, every start)
- *   - target differs                      → KEEP the local file (the user may
- *     have edited it deliberately — same no-clobber policy as
- *     scripts/install-skill.mjs) and print one startup hint
+ *   - target identical to package copy    → no-op (fast path, every start)
+ *   - target has the SAME (or HIGHER)
+ *     skill-version but differs in content → KEEP the local file and warn —
+ *     that is a user edit of the current version (never clobber edits)
+ *   - target has an OLDER/DIFFERENT (or
+ *     absent pre-fingerprint) version      → sync the shipped copy over it —
+ *     that is stale package content from a previous install, NOT a user edit
  *
  * Copy-based (NOT symlink): pnpm lays out node_modules/.pnpm/<pkg>@<version>
  * per version, so a symlink into the package would break on the next update;
- * content copy + identity check self-heals across updates via the restart
+ * content copy + version check self-heals across updates via the restart
  * that plugin installs require anyway. The check runs at plugin load only
  * (once per dsh web start), never per request.
  *
@@ -44,6 +50,12 @@ export function skillTargetFile(home = homedir()): string {
   return join(home, '.agents', 'skills', 'kanban-use', 'SKILL.md')
 }
 
+/** Parse the numeric skill-version from the frontmatter head (0 when absent). */
+function skillVersionOf(text: string): number {
+  const match = text.slice(0, 400).match(/^skill-version:\s*(\d+)\s*$/m)
+  return match === null ? 0 : Number(match[1])
+}
+
 /**
  * Ensure the kanban-use skill is installed under the agent skills directory.
  * Never throws: the plugin must keep loading even if the user home is
@@ -65,21 +77,38 @@ export async function ensureSkillInstalled(home = homedir()): Promise<void> {
   } catch {
     // Missing — install below.
   }
+
+  // Fast path: already in sync (covers symlinked dev installs too).
   if (targetText === sourceText) return
+
+  const sourceVersion = skillVersionOf(sourceText)
+  const manualSyncHint = 'node '
+    + JSON.stringify(join(dirname(skillSourceFile()), '..', 'scripts', 'install-skill.mjs'))
+    + ' --copy'
+
   if (targetText !== undefined) {
-    console.warn(
-      '[dsh-kanban] ~/.agents/skills/kanban-use/SKILL.md differs from the plugin version — '
-      + 'your local copy is kept (it may be your own edit). To sync to the shipped version, '
-      + 'delete it or run: node '
-      + JSON.stringify(join(dirname(skillSourceFile()), '..', 'scripts', 'install-skill.mjs'))
-      + ' --copy',
-    )
-    return
+    const targetVersion = skillVersionOf(targetText)
+    // Same (or higher) version but different content = a user edit of the
+    // current skill — keep it, and explain how to bump/force. Never clobber.
+    if (targetVersion >= sourceVersion) {
+      console.warn(
+        '[dsh-kanban] ~/.agents/skills/kanban-use/SKILL.md differs from the shipped '
+        + `v${sourceVersion} skill — your local copy is kept (same or newer skill-version: `
+        + 'it is your own edit). Forced sync: ' + manualSyncHint
+        + '. If you customize this skill, keep its frontmatter skill-version '
+        + 'bumped so plugin updates never clobber your version.',
+      )
+      return
+    }
+    // Older/different (or absent-pre-fingerprint) version = stale package
+    // content from a previous install, NOT a user edit — sync over it.
   }
+
   try {
     await mkdir(dirname(target), { recursive: true })
     await writeFile(target, sourceText, 'utf8')
-    console.log('[dsh-kanban] kanban-use skill installed to ' + target)
+    const action = targetText === undefined ? 'installed' : `updated to v${sourceVersion}`
+    console.log(`[dsh-kanban] kanban-use skill ${action} at ${target} (new sessions pick it up)`)
   } catch (error) {
     console.warn(`[dsh-kanban] could not auto-install the kanban-use skill (${(error as Error).message}) — run install-skill.mjs manually`)
   }

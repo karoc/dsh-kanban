@@ -69,6 +69,9 @@ if (!existsSync(skillPath)) {
   for (const field of ['为什么', '做了什么', '放弃了什么']) {
     if (!skill.includes(field)) fail(`kanban-use SKILL.md must teach the ${field} card field (same semantics as CARD_FIELD_LABELS)`)
   }
+  if (!/^skill-version:\s*\d+\s*$/m.test(skill.slice(0, 400))) {
+    fail('kanban-use SKILL.md frontmatter must carry a numeric skill-version — bump it when the skill content changes (the host self-heal uses it to distinguish "stale package copy" from "user edit")')
+  }
 }
 
 // 5. The skill is installable (the installer script is part of the contract).

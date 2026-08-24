@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   self-heal runs as a module top-level side effect (a call inside `apply()`
   alone was tree-shaken out of the bundle by rolldown — the documented §5
   trap, this time on the node half).
+- **Skill upgrades now sync automatically (version fingerprint)**: the raw
+  "content differs → keep local" rule confused a plugin upgrade (stale
+  package content from the previous install) with a deliberate user edit, so
+  skill updates never propagated. The skill's frontmatter now carries a
+  numeric `skill-version` (bumped on content changes): same or higher version
+  with different content = a user edit (kept, warned); older/absent version =
+  stale package content (synced over). Users who customize the skill keep
+  their edits safe by bumping the fingerprint themselves.
 
 ## [0.2.0] - 2026-08-23
 

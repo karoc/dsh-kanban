@@ -184,7 +184,7 @@ dsh plugin --profile web remove dsh-kanban   # 同时移除依赖和 bundle 层�
   - **Web 看板页**（卡片字段下方黄色警告行「缺字段：…」，用户侧同样可见）。
 - **`done` 卡片必须自解释**：`summary`（做了什么）+ `rationale`（为什么）+ `rejected`（放弃了什么）三字段齐备，完成的活才是诚实的交接。
 
-**kanban-use 技能**（`skills/kanban-use/SKILL.md`）是这套纪律的深度手册——字段语义、好/坏卡片对比、创建 → 推进 → 收尾全流程、关闭检查清单与模板。系统提示引导会把模型指向它。**安装是自动的**：技能随 npm 包分发（tarball 内含 `skills/kanban-use/SKILL.md` 与 `scripts/install-skill.mjs`），插件 host 半区每次 `dsh web` 启动时检查 `~/.agents/skills/kanban-use/SKILL.md`——缺失 → 复制包内版本；一致 → 不动；**不一致 → 保留你的本地版本**（可能是你改过的），只打一行提示。所以「`dsh plugin add/update dsh-kanban` + 必需的重启」就够了，任何机器都生效。手动命令仍保留（仓库开发 / 强制同步）：
+**kanban-use 技能**（`skills/kanban-use/SKILL.md`）是这套纪律的深度手册——字段语义、好/坏卡片对比、创建 → 推进 → 收尾全流程、关闭检查清单与模板。系统提示引导会把模型指向它。**安装与升级都是自动的**：技能随 npm 包分发（tarball 内含 `skills/kanban-use/SKILL.md` 与 `scripts/install-skill.mjs`），插件 host 半区每次 `dsh web` 启动时检查 `~/.agents/skills/kanban-use/SKILL.md`。技能 frontmatter 里的 `skill-version` 指纹（内容变更时递增）驱动同步策略：缺失 → 复制包内版本；一致 → 不动；**同版本但内容不同 → 保留你的本地版本**（这是你对当前版本的编辑）并提示；**旧/异版本 → 覆盖同步**（这是上一次安装留下的旧包内容，即升级路径）。所以「`dsh plugin add/update dsh-kanban` + 必需的重启」就够了，任何机器都生效。手动命令仍保留（仓库开发 / 强制同步）：
 
 ```sh
 pnpm install:skill            # symlink skills/kanban-use → ~/.agents/skills/kanban-use

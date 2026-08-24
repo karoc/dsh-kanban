@@ -1,5 +1,6 @@
 ---
 name: kanban-use
+skill-version: 1
 description: Use when creating, updating, or closing kanban board cards (board_list / board_add / board_update / board_remove), when the user states a multi-step plan or list of tasks that should outlive this turn, when resuming work in a workspace that has an open board, or when asked how the board should be used. Teaches the card-completeness discipline: every card carries why (rationale), rejected alternatives when a decision was made, and a done card is self-explanatory with all three what/why/rejected fields so the next session can pick the work up without asking.
 ---
 
