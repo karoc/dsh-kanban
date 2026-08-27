@@ -154,7 +154,25 @@ async function writeBoard(cwd: string, board: BoardData): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
   const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
   await writeFile(tmp, JSON.stringify(board, null, 2) + '\n', 'utf8')
-  await rename(tmp, path)
+  await renameWithRetry(tmp, path)
+}
+
+/**
+ * Rename with bounded retry for Windows: the board page polls KANBAN.json and
+ * can hold a read handle for a few milliseconds; `rename()` over a file that
+ * is momentarily open fails with EPERM there. Retry with short backoff before
+ * giving up; POSIX targets rename on the first attempt.
+ */
+export async function renameWithRetry(tmp: string, path: string, attempts = 5): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(tmp, path)
+      return
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EPERM' || attempt >= attempts - 1) throw error
+      await new Promise(resolve => setTimeout(resolve, 25 * (attempt + 1)))
+    }
+  }
 }
 
 /** Max done cards kept on the board; older done cards are archived. */
@@ -193,7 +211,7 @@ export async function archiveExcessDone(cwd: string, board: BoardData): Promise<
   existing.push(...toArchive)
   const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
   await writeFile(tmp, JSON.stringify({ version: 1, archived: existing }, null, 2) + '\n', 'utf8')
-  await rename(tmp, path)
+  await renameWithRetry(tmp, path)
   return { count: toArchive.length, path }
 }
 
