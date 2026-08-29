@@ -5,6 +5,21 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-08-29
+
+### Fixed
+
+- **Windows: board writes survive the poll-vs-write rename race**
+  ([PR #1](https://github.com/karoc/dsh-kanban/pull/1) by
+  [@zenggaofeng001](https://github.com/zenggaofeng001)): the Web board page
+  polls `KANBAN.json` every 15s; on Windows a rename-over that lands while the
+  target is momentarily held open by a read handle fails with `EPERM`
+  (`MoveFileExW(REPLACE_EXISTING)`) and used to surface as a hard write failure
+  on `board_add` / `board_update` / archival. Both write paths (KANBAN.json and
+  the archive) now commit through `renameWithRetry` — retries only on `EPERM`
+  with bounded backoff (5 attempts, ~250 ms) before giving up; POSIX behavior
+  unchanged. Verified on Linux and a real Windows host.
+
 ## [0.2.1] - 2026-08-24
 
 ### Changed
