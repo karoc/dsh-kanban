@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Cross-platform unit tests for the KANBAN.json domain. Zero dependencies
+  # (node built-ins + native TS type-stripping on Node >= 22.6), so it runs on
+  # every OS — Windows coverage matters here: the renameWithRetry fix targets a
+  # Windows-only EPERM race (board page poll vs atomic tmp+rename write).
+  unit-cross-platform:
+    name: board-core spec (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run board-core unit tests
+        run: node --test scripts/board-core.spec.mjs
+
+  # Full gate on Linux: build the plugin bundle, then run the self-contained
+  # discipline/contract audits. NOTE: `pnpm typecheck` and
+  # `scripts/verify-tools.mjs` are intentionally NOT in CI — they resolve
+  # `@deepseek-ai/*` from the DSH host profile's node_modules (symlinked in the
+  # dev environment, not declared in this package), so a clean checkout cannot
+  # satisfy them. They stay as local/release gates (see CONTRIBUTING.md).
+  build-and-smoke:
+    name: bundle + audits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install
+      - name: Build bundle
+        run: pnpm bundle
+      - name: Card-discipline audit
+        run: node scripts/check-card-discipline.mjs
+      - name: Note-spec audit
+        run: node scripts/check-note-spec.mjs
+      - name: Spec contract check
+        run: node scripts/verify-spec.mjs
+      - name: Context injection check
+        run: node scripts/verify-context.mjs
+      - name: Skill-sync check
+        run: node scripts/verify-skill-sync.mjs

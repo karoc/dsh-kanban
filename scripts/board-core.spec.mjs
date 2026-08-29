@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join, sep } from 'node:path'
 import {
   addCard,
   boardPath,
@@ -26,7 +26,11 @@ async function freshWorkspace() {
 
 test('boardPath requires an absolute workspace', () => {
   assert.throws(() => boardPath('relative/path'), /absolute/)
-  assert.equal(boardPath('/abs'), '/abs/KANBAN.json')
+  const p = boardPath('/abs')
+  // Path separators differ per platform (POSIX '/' vs Windows '\'): assert the
+  // contract (absolute + board filename) instead of a hardcoded separator.
+  assert.ok(isAbsolute(p), `boardPath must return an absolute path, got ${p}`)
+  assert.ok(p.endsWith(`${sep}KANBAN.json`), `boardPath must end with ${sep}KANBAN.json, got ${p}`)
 })
 
 test('readBoard returns an empty board when the file is missing', async () => {
