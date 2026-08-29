@@ -26,13 +26,14 @@ jobs:
         run: node --test scripts/board-core.spec.mjs
 
   # Full gate on Linux: build the plugin bundle, then run the self-contained
-  # discipline/contract audits. NOTE: `pnpm typecheck`, `scripts/verify-tools.mjs`,
-  # `verify-spec.mjs`, `verify-context.mjs` and `check-note-spec.mjs` are
-  # intentionally NOT in CI — they resolve `@deepseek-ai/*` or read the DSH
-  # host checkout (e.g. `/srv/deepseek-harness`), which a clean checkout cannot
-  # satisfy. They stay as local/release gates (see CONTRIBUTING.md).
+  # discipline audits. NOTE: the repo's other check scripts are intentionally
+  # NOT in CI — `pnpm typecheck`, `verify-tools.mjs`, `verify-spec.mjs`,
+  # `verify-context.mjs`, `verify-skill-sync.mjs` resolve `@deepseek-ai/*` (via
+  # the built lib or directly) and `check-note-spec.mjs` reads the DSH host
+  # checkout (`/srv/deepseek-harness`); a clean checkout cannot satisfy them.
+  # They stay as local/release gates (see CONTRIBUTING.md).
   build-and-smoke:
-    name: bundle + audits
+    name: bundle + audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,5 +49,3 @@ jobs:
         run: pnpm bundle
       - name: Card-discipline audit
         run: node scripts/check-card-discipline.mjs
-      - name: Skill-sync check
-        run: node scripts/verify-skill-sync.mjs
