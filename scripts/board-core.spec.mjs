@@ -15,6 +15,7 @@ import {
   isBoardData,
   readBoard,
   removeCard,
+  renameWithRetry,
   updateCard,
 } from '../src/board-core.ts'
 
@@ -218,5 +219,26 @@ test('done cards beyond MAX_DONE_CARDS are archived to .agents/notes/archive.jso
   assert.equal(raw.archived.length, 5)
   assert.equal(raw.archived[0].title, 'done-0')
   assert.equal(raw.archived[4].title, 'done-4')
+  await rm(ws, { recursive: true, force: true })
+})
+
+test('renameWithRetry succeeds when the target is briefly held open (Windows EPERM race)', async () => {
+  const ws = await freshWorkspace()
+  const target = join(ws, 'KANBAN.json')
+  const { writeFile, open, rename } = await import('node:fs/promises')
+  // Commit the target so the temp rename has something to replace.
+  await writeFile(target, '{"version":1,"cards":[]}\n', 'utf8')
+  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`
+  await writeFile(tmp, '{"version":1,"cards":[{"id":"card-1"}]}\n', 'utf8')
+  // Hold a read handle on the target (the board page's poll does the same);
+  // release it shortly after the first rename attempt would collide.
+  const handle = await open(target, 'r')
+  setTimeout(() => void handle.close(), 60)
+  // On Windows the first rename-over-open-file attempt fails with EPERM and
+  // the retry loop lands after the handle closes; on POSIX it succeeds at once.
+  await renameWithRetry(tmp, target, 10)
+  const raw = JSON.parse(await readFile(target, 'utf8'))
+  assert.equal(raw.cards.length, 1)
+  assert.equal(raw.cards[0].id, 'card-1')
   await rm(ws, { recursive: true, force: true })
 })
