@@ -149,6 +149,8 @@ shipped, not part of the user-facing `test` chain).
 
 ### Web board page (client half)
 
+![The full-screen three-column board page (To do / In progress / Done)](docs/screenshots/board-page.png)
+
 - A 「看板」 entry in the sidebar footer (`sidebar.footer.action`), showing an
   **open-item count badge** (number when there are todo/in_progress cards,
   "99+" cap);
@@ -278,6 +280,7 @@ scripts/check-card-discipline.mjs # dev gate: guidance/schema/skill agree on com
 scripts/audit-cards.mjs          # KANBAN.json completeness audit ([workspace] [--fail])
 scripts/install-skill.mjs        # symlink/copy the skill into ~/.agents/skills (shipped too)
 scripts/verify-skill-sync.mjs    # skill self-heal three-state verification (part of pnpm test)
+docs/screenshots/board-page.png  # Web board page screenshot (README figure)
 ```
 
 ## Why an external plugin

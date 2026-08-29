@@ -97,6 +97,8 @@
 
 ### Web 看板页（Client 端）
 
+![Web 看板页：全屏三列看板（待办 / 进行中 / 已完成）](docs/screenshots/board-page.png)
+
 - 侧边栏底部「看板」入口（`sidebar.footer.action`），**显示未完成计数角标**（有 todo/in_progress 卡片时显示数字，>99 显示 "99+"）；
 - 点开是全屏三列看板：**待办 / 进行中 / 已完成**，每列带卡片计数；
 - **工作区选择器**：顶部可切换任意工作区（每个工作区有独立 KANBAN.json），默认跟随当前会话工作区；
@@ -214,6 +216,7 @@ scripts/check-card-discipline.mjs # 开发门禁：引导/schema/技能对完整
 scripts/audit-cards.mjs          # KANBAN.json 完整度审计（[workspace] [--fail]）
 scripts/install-skill.mjs        # 把技能 symlink/复制进 ~/.agents/skills（随包分发）
 scripts/verify-skill-sync.mjs    # 技能自愈三态验证（并入 pnpm test）
+docs/screenshots/board-page.png  # Web 看板页截图（README 配图）
 ```
 
 ## 为什么做成外部插件
