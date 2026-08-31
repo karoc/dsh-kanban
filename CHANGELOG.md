@@ -5,6 +5,20 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **post-publish-check polls `dist-tags.latest` instead of snapshotting it**:
+  npm writes the version document first and flips the `latest` dist-tag a
+  moment later (registry eventual consistency), so the old one-shot read right
+  after upload could catch the previous tag and trip a false alarm — the
+  real 0.2.4 incident printed `latest is 0.2.3, expected 0.2.4` and exited 1
+  while the publish was perfectly fine. The tag is now polled with the same
+  cadence as version visibility (up to 14 × 3s), reporting only when it still
+  has not caught up; a deliberate `--tag` publish is called out as the expected
+  exception. Normal publishes take zero extra time (first probe matches).
+
 ## [0.2.4] - 2026-09-01
 
 ### Added
