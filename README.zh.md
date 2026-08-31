@@ -250,6 +250,12 @@ pnpm accept     # 对运行中的 dsh web (http://127.0.0.1:3080) 做 GUI 验收
                 #   侧边栏入口（原生 DSH 按钮）→ 全屏三列页（不透明背景）→ 新增/移动/删除
 ```
 
+自 DSH 0.1.2-alpha.2 起，Web GUI 用浏览器会话 cookie 保护首页
+（"dsh web authentication required"）；真机 GUI 脚本会自行通过 `/?token=`
+握手完成认证。用 `DSH_WEB_TOKEN` 传入 `dsh web` 启动时打印的 token，或把含
+`?token=...` 的完整启动 URL 作为 `DSH_GUI_URL`；未开启认证的实例无需额外配置，
+脚本原样运行。
+
 外部插件默认不做编译期类型检查（tsdown 只转译）；`tsc --noEmit` 在 `pnpm test`
 里兜底，避免"用未导入的组件/图标导致运行时崩溃"这类问题（曾因漏导入
 `IconCheckOutline16` 使看板页整体崩溃）。

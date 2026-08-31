@@ -1,6 +1,7 @@
 // Verify the model proactively uses the kanban board (system-prompt guidance).
 // Run: node scripts/verify-guidance.mjs
 import { chromium } from 'playwright'
+import { gotoApp } from './gui-auth.mjs'
 
 const BASE = process.env.DSH_GUI_URL ?? 'http://127.0.0.1:3199'
 const browser = await chromium.launch()
@@ -8,7 +9,7 @@ try {
   const page = await browser.newPage()
   page.on('pageerror', e => console.log('[pageerror]', e.message))
   page.on('console', m => { if (m.type() === 'error') console.log('[console.error]', m.text().slice(0, 200)) })
-  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await gotoApp(page, BASE)
   await page.waitForTimeout(4000)
   const textarea = page.locator('textarea').first()
   await textarea.waitFor({ state: 'visible', timeout: 15000 })

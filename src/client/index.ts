@@ -11,11 +11,17 @@
  */
 
 import { useSyncExternalStore } from 'react'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+// Canonical client-half context type: the removed dsh-client-runtime package
+// no longer provides ClientContext; cordis Context is the client apply type
+// (matches the built-in ui-* plugins).
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the shell's SlotMap merges (the 'sidebar.footer.action' and
 // 'shell.overlay' entries) into this program.
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+// Type-only: pulls the renderer's Context merge (ctx.slots) — the successor
+// of the removed dsh-client-web-react package.
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { BoardPage, type BoardApi, type BoardMutationBody, type BoardViewPayload, type NoteSpecMutation, type NoteSpecView } from './BoardPage.tsx'

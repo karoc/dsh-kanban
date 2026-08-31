@@ -7,6 +7,7 @@
 // The board's workspace is read from the live header (it flips between runs),
 // and temporary cards are seeded into that exact board, then removed.
 import { chromium } from 'playwright'
+import { gotoApp } from './gui-auth.mjs'
 
 const BASE = process.env.DSH_GUI_URL ?? 'http://127.0.0.1:3080'
 const API = `${BASE}/kanban/api`
@@ -42,7 +43,7 @@ try {
   page.on('console', msg => {
     if (msg.type() === 'error') console.log('[console.error]', msg.text())
   })
-  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await gotoApp(page, BASE)
   await page.waitForTimeout(4000)
 
   const kanbanButton = page.locator('button.kb-sidebar-trigger').first()

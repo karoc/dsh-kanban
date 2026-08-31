@@ -4,6 +4,7 @@
 // card (confirm modal) so the board is left exactly as it was.
 // Run: node scripts/verify-completeness-ui.mjs
 import { chromium } from 'playwright'
+import { gotoApp } from './gui-auth.mjs'
 
 const BASE = process.env.DSH_GUI_URL ?? 'http://127.0.0.1:3080'
 const TITLE = `完整度提示验证-${Date.now().toString(36)}`
@@ -16,7 +17,7 @@ try {
   page.on('pageerror', e => console.log('[pageerror]', e.message))
   page.on('console', m => { if (m.type() === 'error') console.log('[console.error]', m.text().slice(0, 200)) })
 
-  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await gotoApp(page, BASE)
   await page.waitForTimeout(4000)
 
   // Open the board page from the sidebar footer entry (rail mode has no

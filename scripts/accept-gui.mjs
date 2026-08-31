@@ -13,6 +13,7 @@
  * Run: node scripts/accept-gui.mjs
  */
 import { chromium } from 'playwright'
+import { gotoApp } from './gui-auth.mjs'
 
 const BASE = process.env.DSH_GUI_URL ?? 'http://127.0.0.1:3080'
 
@@ -31,7 +32,7 @@ try {
     if (msg.type() === 'error') console.log('  [console.error]', msg.text())
   })
 
-  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await gotoApp(page, BASE)
   // Let the web client boot its plugin tree.
   await page.waitForTimeout(4000)
 
@@ -111,11 +112,18 @@ try {
     } catch { /* fall through */ }
     record('move card to done via menu', moved)
 
-    // 6) Delete the card (ghost icon button with aria-label).
+    // 6) Delete the card: ghost icon button (aria-label) opens the confirm
+    // modal; the primary "Delete/删除" button in the portaled dialog completes
+    // the removal.
     const doneCard = page.locator('.kb-column[data-status="done"] .kb-card', { hasText: 'GUI 验收新增' }).first()
     let deleted = false
     try {
       await doneCard.locator('button[aria-label="Remove"], button[aria-label="删除"]').click()
+      await page.locator('.kb-overlay [role="dialog"]').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
+      await page.waitForTimeout(500)
+      const confirm = page.locator('button', { hasText: /^Delete$|^删除$/ }).last()
+      await confirm.waitFor({ state: 'visible', timeout: 5000 })
+      await confirm.click()
       await page.waitForTimeout(1000)
       const afterDelete = await page.locator('.kb-card', { hasText: 'GUI 验收新增' }).count().catch(() => 0)
       deleted = afterDelete === 0

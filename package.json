@@ -1,6 +1,6 @@
 {
   "name": "dsh-kanban",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "External DeepSeek Harness plugin: a cross-session, workspace-scoped kanban board for plans and todos, persisted to a git-trackable KANBAN.json. Model-facing tools (board_list/board_add/board_update/board_remove) plus a sidebar '看板' entry with a full-screen three-column board page.",
   "type": "module",
   "main": "lib/index.js",
@@ -33,11 +33,10 @@
       "inject": [
         "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-sidebar",
         "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-web-react",
         "@deepseek-ai/dsh-api-remotes"
       ],
       "platform": "web"

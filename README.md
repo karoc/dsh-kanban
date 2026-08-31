@@ -315,6 +315,13 @@ pnpm accept     # GUI acceptance against a running dsh web (http://127.0.0.1:308
                 #   → add / move / delete
 ```
 
+Since DSH 0.1.2-alpha.2 the Web GUI protects its index with a browser-session
+cookie ("dsh web authentication required"); the live-GUI scripts authenticate
+themselves through the `/?token=` handshake. Point them at the token `dsh web`
+printed on launch via `DSH_WEB_TOKEN`, or pass the full launch URL (including
+`?token=...`) as `DSH_GUI_URL`; on instances where auth is off they run
+unchanged.
+
 External plugins get no compile-time typechecking by default (tsdown only
 transpiles); `tsc --noEmit` in `pnpm test` catches "used-but-not-imported"
 mistakes that would otherwise crash at runtime (a missing `IconCheckOutline16`

@@ -785,7 +785,9 @@ function CardDetail(props: {
       open={open}
       onClose={onClose}
       title={card.title}
-      closeLabel={t('close')}
+      // headless: the plugin owns the header chrome (incl. the close button) —
+      // closeLabel is rejected by ModalProps when headless, and unused by the
+      // headless render path anyway.
       headless
       className="kb-detail-modal"
     >

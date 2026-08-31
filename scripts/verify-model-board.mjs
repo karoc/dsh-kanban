@@ -2,6 +2,7 @@
 // board_list, then report what appears in the conversation and on disk.
 // Run: node scripts/verify-model-board.mjs
 import { chromium } from 'playwright'
+import { gotoApp } from './gui-auth.mjs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -21,7 +22,7 @@ try {
   page.on('pageerror', e => console.log('[pageerror]', e.message))
   page.on('console', m => { if (m.type() === 'error') console.log('[console.error]', m.text().slice(0, 200)) })
 
-  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await gotoApp(page, BASE)
   await page.waitForTimeout(4000)
 
   const textarea = page.locator('textarea[placeholder*="Describe"], textarea').first()

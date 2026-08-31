@@ -2,12 +2,13 @@
 // list the workspace's open board items WITHOUT calling any tool. If the
 // auto-injection works on the restarted host, it answers from context.
 import { chromium } from 'playwright'
+import { gotoApp } from './gui-auth.mjs'
 const browser = await chromium.launch()
 try {
   const page = await browser.newPage()
   page.setDefaultTimeout(15000)
   page.on('pageerror', e => console.log('[pageerror]', e.message))
-  await page.goto('http://127.0.0.1:3080', { waitUntil: 'domcontentloaded' })
+  await gotoApp(page, 'http://127.0.0.1:3080')
   await page.waitForTimeout(5000)
   const ta = page.locator('textarea').first()
   await ta.waitFor({ state: 'visible', timeout: 15000 })

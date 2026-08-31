@@ -21,6 +21,7 @@
  * Run: node scripts/verify-card-quality-real.mjs   (GUI must be up; takes 2-8 min)
  */
 import { chromium } from 'playwright'
+import { gotoApp } from './gui-auth.mjs'
 import { readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
@@ -40,7 +41,7 @@ try {
   page.on('pageerror', e => console.log('[pageerror]', e.message))
   page.on('console', m => { if (m.type() === 'error') console.log('[console.error]', m.text().slice(0, 200)) })
 
-  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await gotoApp(page, BASE)
   await page.waitForTimeout(4000)
   const ta = page.locator('textarea').first()
   await ta.waitFor({ state: 'visible', timeout: 20000 })

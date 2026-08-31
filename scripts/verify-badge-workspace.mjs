@@ -13,6 +13,7 @@
 // session -> assert badge shows 4 -> switch to "karoc" group -> open a session
 // -> assert badge is gone.
 import { chromium } from 'playwright'
+import { gotoApp } from './gui-auth.mjs'
 
 const BASE = process.env.DSH_GUI_URL ?? 'http://127.0.0.1:3080'
 const browser = await chromium.launch()
@@ -85,7 +86,7 @@ try {
   page.setDefaultTimeout(20000)
   page.on('pageerror', err => console.log('[pageerror]', err.message))
   page.on('console', msg => { if (msg.type() === 'error') console.log('[console.error]', msg.text()) })
-  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await gotoApp(page, BASE)
   await page.waitForTimeout(5000)
 
   const trigger = page.locator('button.kb-sidebar-trigger').first()

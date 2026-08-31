@@ -2,6 +2,7 @@
 // request WITHOUT mentioning the board, and check the model proactively calls
 // board_add (system-prompt guidance). Run on a fresh temp instance.
 import { chromium } from 'playwright'
+import { gotoApp } from './gui-auth.mjs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 const BASE = process.env.DSH_GUI_URL ?? 'http://127.0.0.1:3199'
@@ -10,7 +11,7 @@ try {
   const page = await browser.newPage()
   page.on('pageerror', e => console.log('[pageerror]', e.message))
   page.on('console', m => { if (m.type() === 'error') console.log('[console.error]', m.text().slice(0,200)) })
-  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await gotoApp(page, BASE)
   await page.waitForTimeout(4000)
   // Click New Session to get a blank session
   const newBtn = page.locator('button', { hasText: /New Session|新建/ }).first()

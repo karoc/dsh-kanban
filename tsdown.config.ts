@@ -16,10 +16,7 @@ const ID = 'dsh-kanban'
 const CLIENT_EXTERNALS: readonly string[] = [
   'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-ui-slots',
-  '@deepseek-ai/dsh-client-web-react',
   '@deepseek-ai/dsh-client-ui-primitives',
-  '@deepseek-ai/dsh-client-runtime/client',
-  '@deepseek-ai/dsh-client-connection/client',
   '@deepseek-ai/dsh-client-locale/client',
 ]
 

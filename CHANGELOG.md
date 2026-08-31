@@ -5,6 +5,35 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-08-31
+
+### Fixed
+
+- **DSH 0.1.2-alpha.2 compatibility** (adapting to upstream breaking changes):
+  `@deepseek-ai/dsh-client-runtime` and `@deepseek-ai/dsh-client-web-react`
+  were removed from DSH — the client-half context type now comes from
+  `@deepseek-ai/cordis` (`Context`), the `ctx.slots` type augmentation is
+  pulled from `@deepseek-ai/dsh-client-ui-renderer/client`, and the
+  `dsh.client.inject` manifest plus the tsdown `CLIENT_EXTERNALS` list drop the
+  dead packages. The card-detail `Modal` no longer passes `closeLabel` with
+  `headless` (the primitives' discriminated union rejects that combination;
+  the headless render path never used it). Runtime platform-module surface is
+  unchanged — react / react/jsx-runtime / `dsh-client-ui-primitives`
+  client-side, `dsh-tools` host-side. Verified 9/9 GUI acceptance +
+  4/4 completeness checks on the live alpha.2 GUI.
+
+### Changed
+
+- **GUI verification scripts authenticate through the new browser-auth gate**:
+  since DSH 0.1.2-alpha.2 the Web GUI's index answers `401` without a
+  browser-session cookie, which broke every Playwright script's plain
+  `page.goto`. A shared `scripts/gui-auth.mjs` now performs the `/?token=`
+  handshake automatically (token from `DSH_WEB_TOKEN`, or embedded in
+  `DSH_GUI_URL`), and all nine live-GUI scripts use it — instances where auth
+  is disabled keep working untouched. `accept-gui`'s delete step also finishes
+  the confirmation dialog (the trash button opens one since 0.2.0; the script
+  never confirmed it, so that assertion always failed).
+
 ## [0.2.2] - 2026-08-29
 
 ### Fixed
