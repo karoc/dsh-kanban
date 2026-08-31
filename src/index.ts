@@ -1,6 +1,6 @@
 /**
- * dsh-kanban host half: model-facing board tools plus the webServer route that
- * backs the Web board page.
+ * dsh-kanban host half (DSH Smoothly Kanban / DSH SK): model-facing board
+ * tools plus the webServer route that backs the Web board page.
  *
  * The board is workspace-scoped: the KANBAN.json file lives at the session
  * workspace root (the `cwd` of the calling agent, or the `cwd` query param the

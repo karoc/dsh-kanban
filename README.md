@@ -1,10 +1,10 @@
-# dsh-kanban
+# DSH Smoothly Kanban (DSH SK)
 
 English | [简体中文](README.zh.md)
 
 [![license MIT](https://img.shields.io/npm/l/dsh-kanban.svg)](LICENSE)
 
-An **external** DeepSeek Harness plugin: a cross-session, cross-branch, persistent **plan / todo kanban board**.
+DSH Smoothly Kanban (**DSH SK**) is an **external** DeepSeek Harness plugin: a cross-session, cross-branch, persistent **plan / todo kanban board**.
 
 When you chat with an agent (in dsh, Codex, Claude Code, …) you produce lots of plans and todos — and the pain is that once you switch to another branch or open a new session, those plans and todos become invisible: they still live in the long conversation, but you can't find them or remember them.
 

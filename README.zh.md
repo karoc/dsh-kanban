@@ -1,10 +1,10 @@
-# dsh-kanban
+# DSH Smoothly Kanban（DSH SK）
 
 [English](README.md) | 简体中文
 
 [![license MIT](https://img.shields.io/npm/l/dsh-kanban.svg)](LICENSE)
 
-一个**外部** DeepSeek Harness 插件：跨会话、跨分支、持久化的**计划 / 待办看板**。
+DSH Smoothly Kanban（**DSH SK**）是一个**外部** DeepSeek Harness 插件：跨会话、跨分支、持久化的**计划 / 待办看板**。
 
 在 dsh（以及 Codex / Claude Code 等对话式 agent）里和模型聊多了计划、待办之后，最痛的问题是：**一旦中途去处理别的分支或开新会话，之前的计划和待办就"看不见了"**——它们还躺在长对话里，但你找不到、想不起来。
 

@@ -1,7 +1,7 @@
 {
   "name": "dsh-kanban",
-  "version": "0.2.3",
-  "description": "External DeepSeek Harness plugin: a cross-session, workspace-scoped kanban board for plans and todos, persisted to a git-trackable KANBAN.json. Model-facing tools (board_list/board_add/board_update/board_remove) plus a sidebar '看板' entry with a full-screen three-column board page.",
+  "version": "0.2.4",
+  "description": "DSH Smoothly Kanban (DSH SK): external DeepSeek Harness plugin — a cross-session, workspace-scoped kanban board for plans and todos, persisted to a git-trackable KANBAN.json. Model-facing tools (board_list/board_add/board_update/board_remove) plus a sidebar '看板' entry with a full-screen three-column board page.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -69,7 +69,9 @@
     "kanban",
     "board",
     "todo",
-    "plan"
+    "plan",
+    "smoothly-kanban",
+    "sk"
   ],
   "author": "karoc",
   "license": "MIT",

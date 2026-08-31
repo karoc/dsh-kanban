@@ -1,8 +1,8 @@
 /**
- * Kanban board plugin, browser half (external bundle, not part of the DSH
- * repository). Registers a sidebar footer action ("看板") that opens a
- * full-screen three-column board page backed by the host webServer route
- * (GET/POST /kanban/api, served by this bundle's host half).
+ * Kanban board plugin (DSH Smoothly Kanban / DSH SK), browser half (external
+ * bundle, not part of the DSH repository). Registers a sidebar footer action
+ * ("看板") that opens a full-screen three-column board page backed by the host
+ * webServer route (GET/POST /kanban/api, served by this bundle's host half).
  *
  * The page resolves its workspace from the current session's cwd (falling
  * back to the most recent workspace path), so the KANBAN.json it reads is the

@@ -1,9 +1,9 @@
-/** Copy dictionaries for the dsh-kanban board page. */
+/** Copy dictionaries for the dsh-kanban board page (DSH Smoothly Kanban). */
 
 /** English strings (the key-set source of truth for this pair). */
 export const en = {
   nav: 'Kanban',
-  title: 'Kanban board',
+  title: 'DSH Smoothly Kanban (DSH SK)',
   intro: 'Cross-session plans and todos, persisted to KANBAN.json at the workspace root.',
   pathLabel: 'Board file',
   close: 'Close',
@@ -63,7 +63,7 @@ export type BoardKey = keyof typeof en
 /** Chinese strings (same keys as {@link en}). */
 export const zh: { [Key in keyof typeof en]: string } = {
   nav: '看板',
-  title: '看板',
+  title: 'DSH Smoothly Kanban（DSH SK）',
   intro: '跨会话的计划与待办，持久化到工作区根目录的 KANBAN.json。',
   pathLabel: '看板文件',
   close: '关闭',
