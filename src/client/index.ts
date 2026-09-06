@@ -1,5 +1,5 @@
 /**
- * Kanban board plugin (DSH Smoothly Kanban / DSH SK), browser half (external
+ * Kanban board plugin (Smoothly Kanban / 思磨力看板), browser half (external
  * bundle, not part of the DSH repository). Registers a sidebar footer action
  * ("看板") that opens a full-screen three-column board page backed by the host
  * webServer route (GET/POST /kanban/api, served by this bundle's host half).

@@ -1,5 +1,5 @@
 /**
- * dsh-kanban host half (DSH Smoothly Kanban / DSH SK): model-facing board
+ * dsh-kanban host half (Smoothly Kanban / 思磨力看板): model-facing board
  * tools plus the webServer route that backs the Web board page.
  *
  * The board is workspace-scoped: the KANBAN.json file lives at the session
@@ -224,7 +224,7 @@ function present(title: string, kind: 'read' | 'other', rawInput?: unknown): Gen
  */
 const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) backed by '
   + 'KANBAN.json at the workspace root — it survives session switches and branches, and it '
-  + 'is shared with the Web "看板" page. Use it to track plans and todos that should outlive '
+  + 'is shared with the Web "思磨力看板" page. Use it to track plans and todos that should outlive '
   + 'the current turn. Record each step with board_add (title + rationale (为什么 — why this '
   + 'task exists and why now); rejected (放弃了什么) when a decision ruled out an '
   + 'alternative; tags for grouping; summary (做了什么) is filled when the work is done). '

@@ -1,17 +1,17 @@
-# DSH Smoothly Kanban (DSH SK)
+# Smoothly Kanban
 
 English | [简体中文](README.zh.md)
 
 [![license MIT](https://img.shields.io/npm/l/dsh-kanban.svg)](LICENSE)
 
-DSH Smoothly Kanban (**DSH SK**) is an **external** DeepSeek Harness plugin: a cross-session, cross-branch, persistent **plan / todo kanban board**.
+Smoothly Kanban（**思磨力看板**）is an **external** DeepSeek Harness plugin: a cross-session, cross-branch, persistent **plan / todo kanban board**.
 
 When you chat with an agent (in dsh, Codex, Claude Code, …) you produce lots of plans and todos — and the pain is that once you switch to another branch or open a new session, those plans and todos become invisible: they still live in the long conversation, but you can't find them or remember them.
 
 `dsh-kanban` sinks plans and todos into a **`KANBAN.json` file at the workspace root** (git-trackable, human-editable, survives sessions) and gives you two ways to maintain it:
 
 - **Model entry**: 4 model-facing tools (`board_list` / `board_add` / `board_update` / `board_remove`) so the model records plan steps and todos while talking.
-- **Web entry**: a new 「看板」 button in the dsh Web GUI sidebar that opens a **full-screen three-column board page** (To do / In progress / Done) with view, status move (incl. mark done), add, and delete.
+- **Web entry**: a new 「思磨力看板」 button in the dsh Web GUI sidebar that opens a **full-screen three-column board page** (To do / In progress / Done) with view, status move (incl. mark done), add, and delete.
 
 The same `KANBAN.json` is shared by the model tools and the Web page, so **what the model writes, the page shows; what you check off on the page, the model reads next time.**
 
@@ -72,7 +72,7 @@ dsh's **system prompt** and visible to the user:
    session the model moves completed cards to done, adds follow-ups as todos,
    updates summaries, and **never leaves stale `in_progress` cards** — the
    board stays an honest cross-session hand-off.
-4. **User-side visibility**: the sidebar 「看板」 entry shows an **open-item
+4. **User-side visibility**: the sidebar 「思磨力看板」 entry shows an **open-item
    count badge** (backed by the `/kanban/counts` route; workspace resolved from
    the most-recent workspace, subscribes to workspace-list changes so it
    appears as soon as data is ready); the board page **auto-refreshes every
@@ -151,7 +151,7 @@ shipped, not part of the user-facing `test` chain).
 
 ![The full-screen three-column board page (To do / In progress / Done)](docs/screenshots/board-page.png)
 
-- A 「看板」 entry in the sidebar footer (`sidebar.footer.action`), showing an
+- A 「思磨力看板」 entry in the sidebar footer (`sidebar.footer.action`), showing an
   **open-item count badge** (number when there are todo/in_progress cards,
   "99+" cap);
 - A full-screen three-column board: **To do / In progress / Done**, each
@@ -235,9 +235,9 @@ dsh plugin --profile web remove dsh-kanban   # removes dependency + bundle layer
 
 ## Usage
 
-1. Install, restart `dsh web`; the sidebar footer shows the 「看板」 button.
+1. Install, restart `dsh web`; the sidebar footer shows the 「思磨力看板」 button.
 2. Ask the model to record plan steps with `board_add` (e.g. "put xxx on the board"); it writes the current workspace's `KANBAN.json`.
-3. Open 「看板」 anytime for the three-column view; mark done / move / add / delete directly on the page.
+3. Open 「思磨力看板」 anytime for the three-column view; mark done / move / add / delete directly on the page.
 4. After switching branches or opening new sessions the board is still there — it's just a file in the workspace.
 
 ## Card completeness & the kanban-use skill

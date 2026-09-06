@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-09-06
+
+### Changed
+
+- **Brand standardized to Smoothly Kanban (思磨力看板)**: the plugin's user-visible name is now **Smoothly Kanban** in English and **思磨力看板** in Chinese (brand: Smoothly / 思磨力), replacing the former "DSH Smoothly Kanban (DSH SK)" everywhere — board page title, sidebar entry (`「思磨力看板」` / "Smoothly Kanban"), bilingual README headings and intro, package description, and the system-prompt guidance's reference to the Web page. The technical identifiers are unchanged: npm package `dsh-kanban`, plugin runtime id `dsh-kanban`, bundle/route prefixes (`/kanban/api`), tool names, and `KANBAN.json` — the rebrand is user-facing only.
+
 ### Fixed
 
 - **post-publish-check polls `dist-tags.latest` instead of snapshotting it**:
