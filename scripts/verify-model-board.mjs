@@ -25,7 +25,7 @@ try {
   await gotoApp(page, BASE)
   await page.waitForTimeout(4000)
 
-  const textarea = page.locator('textarea[placeholder*="Describe"], textarea').first()
+  const textarea = page.locator('textarea[placeholder*="Describe"], textarea, [contenteditable="true"]').first()
   await textarea.waitFor({ state: 'visible', timeout: 15000 })
   await textarea.click()
   await textarea.fill(

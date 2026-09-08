@@ -17,7 +17,7 @@ try {
   const newBtn = page.locator('button', { hasText: /New Session|新建/ }).first()
   await newBtn.click().catch(() => {})
   await page.waitForTimeout(2000)
-  const textarea = page.locator('textarea').first()
+  const textarea = page.locator('textarea, [contenteditable="true"]').first()
   await textarea.waitFor({ state: 'visible', timeout: 15000 })
   await textarea.click()
   // Ask for a plan WITHOUT mentioning the board at all.

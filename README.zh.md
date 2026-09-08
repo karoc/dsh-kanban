@@ -207,6 +207,7 @@ src/index.ts          # Host 半区：4 个模型工具 + /kanban/api webServer 
 src/client/index.ts   # client apply：注册侧边栏入口 + 全屏看板页
 src/client/BoardPage.tsx   # 三列看板页组件（含缺字段提示行）
 src/client/KanbanSurface.tsx # 侧边栏按钮 + overlay 包装
+src/client/workspace-pick.ts # 最近活跃工作区推导（纯函数，带单测）
 src/client/board-state.ts   # 页面开关的模块级 observable
 src/client/locales.ts       # 中英文案
 src/client/styles.ts        # --dsw-alias-* 设计令牌样式
@@ -243,7 +244,8 @@ pnpm bundle    # 产出 lib/index.js + lib/client.js
 ## 验证
 
 ```sh
-pnpm test       # tsc --noEmit 类型检查 + 14 个 KANBAN.json 领域单测 + Host 工具冒烟
+pnpm test       # tsc --noEmit 类型检查 + 14 个 KANBAN.json 领域单测
+                #   + 8 个 workspace-pick 推导单测 + Host 工具冒烟
 pnpm typecheck  # 仅类型检查（tsc --noEmit）
 pnpm verify     # 4 个 board 工具注册 + board_add 端到端落盘
 pnpm accept     # 对运行中的 dsh web (http://127.0.0.1:3080) 做 GUI 验收：
@@ -255,6 +257,10 @@ pnpm accept     # 对运行中的 dsh web (http://127.0.0.1:3080) 做 GUI 验收
 握手完成认证。用 `DSH_WEB_TOKEN` 传入 `dsh web` 启动时打印的 token，或把含
 `?token=...` 的完整启动 URL 作为 `DSH_GUI_URL`；未开启认证的实例无需额外配置，
 脚本原样运行。
+
+自 DSH 0.1.3-alpha.1 起，composer 输入框由 `<textarea>` 改为 contenteditable
+div；真机脚本的定位器同时匹配两者（`textarea, [contenteditable="true"]`），
+同一套脚本在 0.1.2 与 0.1.3 上都能跑。
 
 外部插件默认不做编译期类型检查（tsdown 只转译）；`tsc --noEmit` 在 `pnpm test`
 里兜底，避免"用未导入的组件/图标导致运行时崩溃"这类问题（曾因漏导入

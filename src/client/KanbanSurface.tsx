@@ -12,6 +12,7 @@ import { IconChecklistOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { BoardPage, type BoardApi, type BoardWorkspace } from './BoardPage.tsx'
 import { getBoardOpen, subscribeBoard } from './board-state.ts'
 import { getCountsSnapshot, subscribeCounts } from './board-counts.ts'
+import { recentWorkspaceId } from './workspace-pick.ts'
 import type { BoardKey } from './locales.ts'
 
 /**
@@ -53,12 +54,12 @@ export interface BoardOverlayInjected {
 /**
  * Build the full workspace list plus the default (current-session) workspace
  * from the framework seats. Default: the current session's cwd, then the most
- * recent workspace, then the first workspace. The list drives the board page's
- * workspace switcher.
+ * recently active workspace, then the first workspace. The list drives the
+ * board page's workspace switcher.
  */
 function resolveWorkspaces(
-  sessionList: { byId?: Record<string, { cwd?: string }>; current?: string },
-  workspaceList: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string },
+  sessionList: { byId?: Record<string, { cwd?: string; updatedAt?: number }>; current?: string },
+  workspaceList: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[]; createdAt?: string }> },
 ): { all: BoardWorkspace[]; current: BoardWorkspace | undefined } {
   const items = workspaceList.items ?? []
   const all = items.map(item => ({
@@ -76,7 +77,7 @@ function resolveWorkspaces(
       return { all, current: match ?? { workspaceId: cwd, cwd, title: base } }
     }
   }
-  const recentId = workspaceList.recentWorkspaceId
+  const recentId = recentWorkspaceId(items, sessionList.byId)
   const recent = all.find(ws => ws.workspaceId === recentId) ?? all[0]
   return { all, current: recent }
 }
@@ -87,16 +88,16 @@ function resolveWorkspaces(
  * external bundle compiles without pulling the runtime's merged types.
  */
 interface RootStandardProps {
-  useSessions?: (selector: (snapshot: { byId?: Record<string, { cwd?: string }>; current?: string }) => unknown) => unknown
-  useWorkspaces?: (selector: (snapshot: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string }) => unknown) => unknown
+  useSessions?: (selector: (snapshot: { byId?: Record<string, { cwd?: string; updatedAt?: number }>; current?: string }) => unknown) => unknown
+  useWorkspaces?: (selector: (snapshot: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[]; createdAt?: string }> }) => unknown) => unknown
 }
 
 /** Overlay wrapper: renders the board page only while open. */
 export function KanbanOverlay(props: BoardOverlayInjected & RootStandardProps) {
   const open = useSyncExternalStore(subscribeBoard, getBoardOpen)
   const { all, current } = resolveWorkspaces(
-    (props.useSessions?.((s: { byId?: Record<string, { cwd?: string }>; current?: string }) => s) as { byId?: Record<string, { cwd?: string }>; current?: string }) ?? {},
-    (props.useWorkspaces?.((s: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string }) => s) as { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string }>; recentWorkspaceId?: string }) ?? {},
+    (props.useSessions?.((s: { byId?: Record<string, { cwd?: string; updatedAt?: number }>; current?: string }) => s) as { byId?: Record<string, { cwd?: string; updatedAt?: number }>; current?: string }) ?? {},
+    (props.useWorkspaces?.((s: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[]; createdAt?: string }> }) => s) as { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[]; createdAt?: string }> }) ?? {},
   )
   if (!open) return null
   return (

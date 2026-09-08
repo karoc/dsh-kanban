@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-09-08
+
+### Added
+
+- **`recentWorkspaceId` derivation with unit tests**: new `src/client/workspace-pick.ts` (pure function) plus `scripts/workspace-pick.spec.mjs` (8 cases, part of `pnpm test`) derive the most-recently-active workspace from the workspaces + sessions feeds, mirroring DSH's official ui-workspace `recentWorkspace` semantics — the workspace whose attached sessions have the latest `updatedAt`, falling back to the workspace's own `createdAt` when it has no session.
+
+### Fixed
+
+- **Board default workspace / sidebar badge no longer silently pin to the first workspace**: DSH removed the `recentWorkspaceId` field from the `WorkspaceSnapshot`, and the client still read it — with no current-session cwd available, the board page's default workspace and the badge's fallback degraded to the first registered workspace. Both consumers now use the new derivation (the current session's cwd remains the primary source).
+- **Live-GUI verification scripts adapt to DSH 0.1.3-alpha.1**: the composer input changed from `<textarea>` to a contenteditable div; the seven live-GUI scripts now match `textarea, [contenteditable="true"]` so the same scripts run against both 0.1.2 and 0.1.3. `verify-injection-real-3080.mjs` additionally reads `DSH_GUI_URL` (token handshake like the other scripts) and opens a session in the target workspace before sending the probe; the badge / injection scripts' fixture card titles were refreshed to the machine's live boards.
+
 ## [0.2.5] - 2026-09-06
 
 ### Changed

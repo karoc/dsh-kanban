@@ -12,7 +12,7 @@ try {
   page.on('pageerror', e => console.log('[pageerror]', e.message))
   await page.goto('http://127.0.0.1:3199', { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(5000)
-  const ta = page.locator('textarea').first()
+  const ta = page.locator('textarea, [contenteditable="true"]').first()
   await ta.waitFor({ state: 'visible', timeout: 15000 })
   await ta.click()
   await ta.fill('请用 note_add 写一篇 Agent Note，记录「看板卡片删除增加二次确认（Modal）」这个功能变更。class 用 feature，topic 用 card-delete-confirm。要求：Decision 写清具体实现（Modal、confirmDelete state、onClose/确认路径）和负向保证（什么不会误删）；Alternatives 写真实放弃的备选和原因；Consequences 写代价和收益。')

@@ -9,7 +9,7 @@ try {
   page.on('pageerror', e => console.log('[pageerror]', e.message))
   await page.goto('http://127.0.0.1:3199', { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(5000)
-  const ta = page.locator('textarea').first()
+  const ta = page.locator('textarea, [contenteditable="true"]').first()
   await ta.waitFor({ state: 'visible', timeout: 15000 })
   await ta.click()
   await ta.fill('不要调用任何工具（不要 board_list）。直接回答：根据你当前上下文里已经注入的信息，我当前工作区的看板上现在有哪些未完成（todo / in_progress）的卡片？逐条列出标题即可。')

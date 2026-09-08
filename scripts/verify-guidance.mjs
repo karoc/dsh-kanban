@@ -11,7 +11,7 @@ try {
   page.on('console', m => { if (m.type() === 'error') console.log('[console.error]', m.text().slice(0, 200)) })
   await gotoApp(page, BASE)
   await page.waitForTimeout(4000)
-  const textarea = page.locator('textarea').first()
+  const textarea = page.locator('textarea, [contenteditable="true"]').first()
   await textarea.waitFor({ state: 'visible', timeout: 15000 })
   await textarea.click()
   await textarea.fill(

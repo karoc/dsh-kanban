@@ -1,17 +1,27 @@
 // Verify the sidebar badge follows workspace switches on the live 3080 GUI.
 //
-// The bug: the badge resolved its workspace from the workspaces feed's
-// recentWorkspaceId (the workspace with the most recently updated session),
-// which can stay pinned to another workspace after the user switches, so the
-// badge showed the wrong count. The fix resolves from the current session's
-// cwd (like the board page) and subscribes to the sessions feed.
+// The original bug: the badge resolved its workspace from the workspaces
+// feed's recentWorkspaceId (the workspace with the most recently updated
+// session), which can stay pinned to another workspace after the user
+// switches, so the badge showed the wrong count. The fix resolves from the
+// current session's cwd (like the board page) and subscribes to the sessions
+// feed. Since DSH removed `recentWorkspaceId` from the WorkspaceSnapshot, the
+// no-current-session fallback derives the most-recently-active workspace from
+// the workspaces + sessions feeds (client-side `recentWorkspaceId`, mirroring
+// ui-workspace's `recentWorkspace`).
 //
 // Test data on this machine: /srv/jiuta has 4 open cards (badge "4") while
 // /home/karoc and /home/karoc/dsh-desktop have 0 (no badge).
 //
-// Flow: boot -> record badge -> click "jiuta" workspace group -> open a jiuta
-// session -> assert badge shows 4 -> switch to "karoc" group -> open a session
-// -> assert badge is gone.
+// Flow: boot -> record badge -> click "dsh-desktop" workspace group -> open a
+// dsh-desktop session -> assert badge shows 2 -> switch to "dsh-kanban" group
+// -> open a session -> assert badge shows 1 -> switch back to dsh-desktop ->
+// assert badge shows 2 again.
+//
+// [2026-09-08] Test data refreshed for the live machine: /home/karoc/dsh-desktop
+// has 2 open cards (badge "2") while /home/karoc/dsh-kanban has 1 (badge "1").
+// The old fixtures (jiuta=4 / karoc=0) went stale as boards changed; the
+// current pair keeps clear discriminability in both directions.
 import { chromium } from 'playwright'
 import { gotoApp } from './gui-auth.mjs'
 
@@ -93,25 +103,25 @@ try {
   await trigger.waitFor({ state: 'visible', timeout: 15000 })
   console.log('boot badge:', JSON.stringify(await badgeState(page)))
 
-  // --- Switch to jiuta (4 open) ---
-  await clickWorkspace(page, 'jiuta')
-  await openFirstSessionInGroup(page, 'jiuta', '理解 H1 修复执行计划')
-  const jiutaBadge = await badgeState(page)
-  record('after switching to jiuta, badge shows 4', jiutaBadge.visible && jiutaBadge.text === '4', JSON.stringify(jiutaBadge))
-  await page.screenshot({ path: '/tmp/kb-badge-jiuta.png' })
+  // --- Switch to dsh-desktop (2 open) ---
+  await clickWorkspace(page, 'dsh-desktop')
+  await openFirstSessionInGroup(page, 'dsh-desktop')
+  const desktopBadge = await badgeState(page)
+  record('after switching to dsh-desktop, badge shows 2', desktopBadge.visible && desktopBadge.text === '2', JSON.stringify(desktopBadge))
+  await page.screenshot({ path: '/tmp/kb-badge-dsh-desktop.png' })
 
-  // --- Switch to karoc (0 open) ---
-  await clickWorkspace(page, 'karoc')
-  await openFirstSessionInGroup(page, 'karoc')
-  const karocBadge = await badgeState(page)
-  record('after switching to karoc, badge is hidden (0 open)', !karocBadge.visible, JSON.stringify(karocBadge))
-  await page.screenshot({ path: '/tmp/kb-badge-karoc.png' })
+  // --- Switch to dsh-kanban (1 open) ---
+  await clickWorkspace(page, 'dsh-kanban')
+  await openFirstSessionInGroup(page, 'dsh-kanban')
+  const kanbanBadge = await badgeState(page)
+  record('after switching to dsh-kanban, badge shows 1', kanbanBadge.visible && kanbanBadge.text === '1', JSON.stringify(kanbanBadge))
+  await page.screenshot({ path: '/tmp/kb-badge-dsh-kanban.png' })
 
-  // --- Switch back to jiuta again (repeatability) ---
-  await clickWorkspace(page, 'jiuta')
-  await openFirstSessionInGroup(page, 'jiuta', '理解 H1 修复执行计划')
-  const jiutaAgain = await badgeState(page)
-  record('switch back to jiuta shows 4 again', jiutaAgain.visible && jiutaAgain.text === '4', JSON.stringify(jiutaAgain))
+  // --- Switch back to dsh-desktop again (repeatability) ---
+  await clickWorkspace(page, 'dsh-desktop')
+  await openFirstSessionInGroup(page, 'dsh-desktop')
+  const desktopAgain = await badgeState(page)
+  record('switch back to dsh-desktop shows 2 again', desktopAgain.visible && desktopAgain.text === '2', JSON.stringify(desktopAgain))
 } catch (err) {
   console.error('VERIFY FAILED:', err.message)
   results.push({ name: 'script ran to completion', ok: false, detail: err.message })

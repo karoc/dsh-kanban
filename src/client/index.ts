@@ -28,6 +28,7 @@ import { BoardPage, type BoardApi, type BoardMutationBody, type BoardViewPayload
 import { startCountsPolling, triggerCountsPoll } from './board-counts.ts'
 import { closeBoard, openBoard } from './board-state.ts'
 import { KanbanOverlay, SidebarKanbanButton, type BoardOverlayInjected } from './KanbanSurface.tsx'
+import { recentWorkspaceId } from './workspace-pick.ts'
 import { en, zh, type BoardKey } from './locales.ts'
 // Side-effect import: injects the design-token styles at module evaluation.
 import './styles.ts'
@@ -122,34 +123,37 @@ export function apply(ctx: ClientContext): void {
   // Sidebar badge: poll the current workspace's open-item count so the
   // 「看板」 entry shows how many cards are open. The workspace source is the
   // CURRENT session's cwd (same rule the board page uses to pick its
-  // workspace), falling back to the workspaces feed's most-recent workspace —
-  // NOT recentWorkspaceId outright: that feed projects "the workspace with
-  // the most recently updated session", which can stay pinned to a different
-  // workspace after the user switches, so the badge would keep showing the
-  // wrong count. Also subscribes to both the session list (what actually
+  // workspace), falling back to the most-recently-active workspace derived
+  // from the workspaces + sessions feeds (official ui-workspace semantics —
+  // the WorkspaceSnapshot's old `recentWorkspaceId` field was removed, so a
+  // structural read of it would silently pin the badge to the first
+  // workspace). Also subscribes to both the session list (what actually
   // changes on a workspace switch) and the workspace list so the badge
   // follows the switch immediately instead of after the next poll interval.
   // Stops on plugin teardown.
   ctx.effect(() => {
     const stop = startCountsPolling(() => {
       const sessions = ctx.get('sessions') as
-        | { list?: { getSnapshot: () => { current?: string; byId?: Record<string, { cwd?: string }> } } }
+        | { list?: { getSnapshot: () => { current?: string; byId?: Record<string, { cwd?: string; updatedAt?: number }> } } }
         | undefined
+      let sessionBy: Record<string, { cwd?: string; updatedAt?: number }> | undefined
       try {
         const sessionState = sessions?.list?.getSnapshot()
         const currentId = sessionState?.current
+        sessionBy = sessionState?.byId
         const currentCwd = currentId === undefined ? undefined : sessionState?.byId?.[currentId]?.cwd
         if (currentCwd !== undefined && currentCwd !== '') return currentCwd
       } catch {
         // Fall through to the workspace feed.
       }
       const workspaces = ctx.get('workspaces') as
-        | { list?: { getSnapshot: () => { items?: ReadonlyArray<{ workspaceId: string; path: string }>; recentWorkspaceId?: string } } }
+        | { list?: { getSnapshot: () => { items?: ReadonlyArray<{ workspaceId: string; path: string; sessionIds?: readonly string[]; createdAt?: string }> } } }
         | undefined
       try {
         const state = workspaces?.list?.getSnapshot()
         const items = state?.items ?? []
-        const recent = items.find(item => item.workspaceId === state?.recentWorkspaceId)
+        const recentId = recentWorkspaceId(items, sessionBy)
+        const recent = items.find(item => item.workspaceId === recentId)
         return recent?.path ?? items[0]?.path
       } catch {
         return undefined

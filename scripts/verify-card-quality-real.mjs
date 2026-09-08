@@ -43,7 +43,7 @@ try {
 
   await gotoApp(page, BASE)
   await page.waitForTimeout(4000)
-  const ta = page.locator('textarea').first()
+  const ta = page.locator('textarea, [contenteditable="true"]').first()
   await ta.waitFor({ state: 'visible', timeout: 20000 })
   await ta.click()
   await ta.fill(
