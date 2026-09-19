@@ -9,8 +9,19 @@
  * mistaken for success.
  *
  * Registry eventual consistency: right after upload, the version document can
- * still 404 for a few seconds while the index catches up. So this script
- * POLLS until the version is visible (or a timeout elapses) before judging it.
+ * still 404 while the index catches up — MEASURED at several minutes, not
+ * seconds (@karoc/dsh-proxy 0.1.1 took ~4 minutes; on 2026-09-19 a 60s window
+ * reported a successful sibling-plugin publish as a failure while npm had
+ * already returned PUT 200), so this script POLLS for up to ~5 minutes before
+ * judging it.
+ *
+ * Timeout semantics: postpublish runs ONLY after the upload succeeded, so a
+ * version that stays invisible is almost always index lag, not a failed
+ * publish. The script therefore distinguishes:
+ *   - package document visible (any version) → the package IS on the registry;
+ *     the new version is just not indexed yet → treat as published (exit 0)
+ *     with a clear "verify manually, do not re-publish" note;
+ *   - package document also 404 → genuinely unconfirmed → exit 1.
  *
  * All registry reads go through `fetch` directly (no `npm view` subprocess):
  * npm CLI prints a full multi-line E404 error block for every probe of a
@@ -58,21 +69,45 @@ async function versionVisible() {
   return doc !== null && typeof doc.version === 'string'
 }
 
+/** Fetch the package-level document (any version visible?) — the stronger signal. */
+async function packageVisible() {
+  const doc = await fetchRegistryJson(encodeURIComponent(name))
+  return doc !== null && typeof doc === 'object'
+}
+
 // Poll until the published version is visible in the registry index.
+// npm's own message says indexing "may take a few minutes", so allow 5 min.
 const POLL_INTERVAL_MS = 3000
-const POLL_ATTEMPTS = 14 // up to ~42s of waiting
+const POLL_ATTEMPTS = 100 // up to ~5 minutes of waiting
 let visible = false
 try { visible = await versionVisible() } catch { /* probe failure — keep polling */ }
 for (let attempt = 1; !visible && attempt <= POLL_ATTEMPTS; attempt += 1) {
-  console.log(`   (version not visible yet — registry index catching up; retry ${attempt}/${POLL_ATTEMPTS})`)
+  if (attempt % 10 === 1 || attempt === POLL_ATTEMPTS) {
+    console.log(`   (version not visible yet — registry index catching up; retry ${attempt}/${POLL_ATTEMPTS})`)
+  }
   await sleep(POLL_INTERVAL_MS)
   try { visible = await versionVisible() } catch { /* probe failure — keep polling */ }
 }
 if (!visible) {
+  // Distinguish "index lag on a live package" from "package not found at all".
+  let packageLive = false
+  try { packageLive = await packageVisible() } catch { /* probe failure */ }
+  if (packageLive) {
+    // The package document exists — the upload landed; only the version index
+    // is still catching up. Treat as published; npm itself warned processing
+    // "may take a few minutes", and postpublish only runs after the upload.
+    console.error(`\n⚠️  version ${version} is not indexed yet after 5 minutes of polling,`)
+    console.error('   but the package document IS live on the registry — the upload succeeded.')
+    console.error('   The index is still catching up (npm: "may take a few minutes").')
+    console.error(`   Verify shortly with: npm view ${name} versions`)
+    console.error(`   Do NOT re-publish ${version} — it is live or about to be.`)
+    process.exit(0)
+  }
   console.error(`\n⚠️  ${name}@${version} did not become visible on the registry after `
-    + `${Math.round((POLL_ATTEMPTS * POLL_INTERVAL_MS) / 1000)}s of polling.`)
+    + `${Math.round((POLL_ATTEMPTS * POLL_INTERVAL_MS) / 1000)}s of polling,`)
+  console.error('   and the package document is not visible either.')
   console.error('   The publish may have failed before the upload completed, or the index')
-  console.error('   is still catching up. Verify manually with `npm view dsh-kanban versions`.')
+  console.error(`   is still extremely slow. Verify manually with: npm view ${name} versions`)
   console.error(`   Do NOT re-publish ${version} without checking — it may be live.`)
   process.exit(1)
 }
