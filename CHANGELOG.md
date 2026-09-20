@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **kanban-use 技能曾对 DSH 完全不可见（静默丢弃）**：`skills/kanban-use/SKILL.md` 的 `description` frontmatter 值含 ASCII `": "`（冒号+空格）却未加引号，YAML 在 compact mapping 里把它读成嵌套 mapping。DSH 的 skill provider 对这类文件只写一条服务端 warn 就丢弃，于是该技能既不在模型可用的技能目录里、用户界面上也没有任何提示。现改为双引号 YAML 标量（内部引号转义为 `\"`），文本逐字保留。
+
+### Changed
+
+- **`skill-version` 由 1 升到 2**。上面的 frontmatter 修复属于技能**内容变更**，而 `src/skill-sync.ts` 只在包内指纹**更新**时才覆盖已安装的本地副本。不升指纹的话，任何已经装过 v1 技能的机器都会保留那份坏副本（"同版本但内容不同"被策略判为用户编辑而刻意保留），修复只能到达全新安装——即"修了但等于没修"。
+
 ## [0.2.6] - 2026-09-08
 
 ### Added
