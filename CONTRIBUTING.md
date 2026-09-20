@@ -40,6 +40,20 @@ restart, open the sidebar 「看板」).
 - Both `README.md` and `README.zh.md` updated for user-visible changes.
 - `lib/` built and fresh (`pnpm bundle`).
 - Tag `v<version>` at HEAD.
+- **Changed the skill content? Bump `skill-version` in
+  `skills/kanban-use/SKILL.md`.** The self-heal only overwrites an installed copy
+  when the shipped fingerprint is NEWER (`src/skill-sync.ts`); "same version,
+  different content" is deliberately treated as a user edit and KEPT. Ship a
+  content change under an unchanged fingerprint and the fix reaches fresh
+  installs only — every machine that already installed the old copy keeps it.
+  `check-card-discipline.mjs` can only assert the field exists and is numeric, so
+  this bump is on the maintainer.
+- **Keep `skills/kanban-use/SKILL.md` frontmatter parseable.** An UNQUOTED
+  `description` containing an ASCII `": "` is read by YAML as a nested mapping,
+  and DSH's skill provider then drops the whole file with only a server-side
+  warning — the skill disappears from the model catalog and from the user's view
+  with no visible error. Quote the value (escaping inner `"` as `\"`) or use a
+  full-width colon. Nothing in this repo gates that today.
 
 ## Publishing to npm (human-operated, 2FA)
 
