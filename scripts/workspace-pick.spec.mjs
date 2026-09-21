@@ -1,14 +1,17 @@
 /**
- * Unit tests for the recent-workspace derivation (workspace-pick.ts): DSH
- * removed `recentWorkspaceId` from the WorkspaceSnapshot, so the client
- * derives the most-recently-active workspace from the workspaces + sessions
- * feeds — mirroring ui-workspace's `recentWorkspace` (navigation.ts). Runs
- * with node:test against the TS source (Node type-stripping).
+ * Unit tests for the recent-workspace and current-session derivations
+ * (workspace-pick.ts): DSH removed `recentWorkspaceId` from the
+ * WorkspaceSnapshot, so the client derives the most-recently-active workspace
+ * from the workspaces + sessions feeds — mirroring ui-workspace's
+ * `recentWorkspace` (navigation.ts). DSH 0.1.6-alpha.2 then removed the session
+ * list's `current` field, so the current Session is derived from main-view
+ * retention (`retainedBy.mainView > 0`) with `current` still honored for
+ * 0.1.2–0.1.5. Runs with node:test against the TS source (Node type-stripping).
  * Run: node --test scripts/workspace-pick.spec.mjs
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { recentWorkspaceId } from '../src/client/workspace-pick.ts'
+import { currentSessionId, recentWorkspaceId } from '../src/client/workspace-pick.ts'
 
 const WS_A_S1 = { workspaceId: 'a', sessionIds: ['s1'], createdAt: '2026-01-01T00:00:00.000Z' }
 const WS_B_S2 = { workspaceId: 'b', sessionIds: ['s2'], createdAt: '2026-01-02T00:00:00.000Z' }
@@ -80,4 +83,47 @@ test('workspaces whose sessions are missing from byId fall to createdAt', () => 
     { workspaceId: 'b', sessionIds: ['s2'], createdAt: '2026-01-02T00:00:00.000Z' },
   ]
   assert.equal(recentWorkspaceId(items, { other: { updatedAt: 1 } }), 'b')
+})
+
+// --- currentSessionId: both DSH selection eras -----------------------------
+
+test('currentSessionId reads the 0.1.6+ main-view retention signal', () => {
+  const sessions = {
+    byId: {
+      s1: { cwd: '/w/a', retainedBy: { pane: 1 } },
+      s2: { cwd: '/w/b', retainedBy: { mainView: 1 } },
+    },
+  }
+  assert.equal(currentSessionId(sessions), 's2')
+})
+
+test('currentSessionId falls back to the pre-0.1.6 `current` field', () => {
+  const sessions = {
+    current: 's1',
+    byId: {
+      s1: { cwd: '/w/a', retainedBy: { mainView: 1 } },
+      s2: { cwd: '/w/b', retainedBy: { mainView: 1 } },
+    },
+  }
+  assert.equal(currentSessionId(sessions), 's1')
+})
+
+test('currentSessionId is undefined with no staged session (global panel open)', () => {
+  // 0.1.6-alpha.2 zeroes main-view retention while a global panel is selected;
+  // a retained non-main consumer (e.g. a job) must not be mistaken for it.
+  assert.equal(currentSessionId({ byId: { s1: { retainedBy: { jobs: 2 } } } }), undefined)
+  assert.equal(currentSessionId({ byId: { s1: {} } }), undefined)
+  assert.equal(currentSessionId({ byId: {} }), undefined)
+  assert.equal(currentSessionId(undefined), undefined)
+  assert.equal(currentSessionId({}), undefined)
+})
+
+test('currentSessionId ignores an empty legacy `current` string', () => {
+  const sessions = { current: '', byId: { s2: { retainedBy: { mainView: 3 } } } }
+  assert.equal(currentSessionId(sessions), 's2')
+})
+
+test('currentSessionId reads a zero retention count as not staged', () => {
+  const sessions = { byId: { s1: { retainedBy: { mainView: 0 } }, s2: { retainedBy: { mainView: 1 } } } }
+  assert.equal(currentSessionId(sessions), 's2')
 })

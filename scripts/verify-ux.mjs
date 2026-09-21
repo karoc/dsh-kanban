@@ -10,7 +10,10 @@ import { chromium } from 'playwright'
 import { gotoApp } from './gui-auth.mjs'
 
 const BASE = process.env.DSH_GUI_URL ?? 'http://127.0.0.1:3080'
-const API = `${BASE}/kanban/api`
+// DSH_GUI_URL may be the full launch URL (`/?token=…`, the documented way to
+// authenticate these scripts) — the kanban API hangs off the ORIGIN, never off
+// the page URL, or every request would 404 into an empty body.
+const API = `${new URL(BASE).origin}/kanban/api`
 
 const results = []
 function record(name, ok, detail = '') {
@@ -46,12 +49,12 @@ try {
   await gotoApp(page, BASE)
   await page.waitForTimeout(4000)
 
-  const kanbanButton = page.locator('button.kb-sidebar-trigger').first()
+  const kanbanButton = page.locator('button:has(.kb-panel-icon)').first()
   await kanbanButton.waitFor({ state: 'visible', timeout: 15000 })
   await kanbanButton.click()
   await page.waitForTimeout(1200)
 
-  const overlay = page.locator('.kb-overlay').first()
+  const overlay = page.locator('.kb-panel[data-testid="kanban-page"]').first()
   await overlay.waitFor({ state: 'visible', timeout: 10000 })
 
   // Detect the board file path + GUI locale from the header sub line. The

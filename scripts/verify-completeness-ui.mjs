@@ -20,12 +20,12 @@ try {
   await gotoApp(page, BASE)
   await page.waitForTimeout(4000)
 
-  // Open the board page from the sidebar footer entry (rail mode has no
-  // visible label — the trigger carries it in aria-label).
-  const nav = page.locator('.kb-sidebar-trigger').first()
+  // Open the board from the sidebar's global-panel row (the shell owns the
+  // button; our glyph sits inside it, so the selector is locale-independent).
+  const nav = page.locator('button:has(.kb-panel-icon)').first()
   await nav.waitFor({ state: 'visible', timeout: 15000 })
   await nav.click()
-  const board = page.locator('.kb-overlay[data-testid="kanban-page"]').first()
+  const board = page.locator('.kb-panel[data-testid="kanban-page"]').first()
   await board.waitFor({ state: 'visible', timeout: 15000 })
   ok('board page opens', await board.isVisible())
 

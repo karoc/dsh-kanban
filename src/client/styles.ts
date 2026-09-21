@@ -9,67 +9,32 @@
  * DSH look.
  */
 export const KANBAN_STYLES = `
-/* Sidebar footer trigger, mirroring the Settings trigger (34px compact row,
-   12px radius, 10px left pad, icon + left-aligned label). */
-.kb-sidebar-trigger {
-  flex: none;
-  display: flex;
+/* Global-panel glyph: the sidebar owns the panel row (button, label, tooltip,
+   selected tint); this only draws the icon plus the open-item badge. */
+.kb-panel-icon {
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: calc(100% + 8px);
-  height: 34px;
-  margin: 4px -4px 4px;
-  padding: 6px 2px 6px 10px;
-  box-sizing: border-box;
-  border: none;
-  border-radius: 12px;
-  background: transparent;
-  cursor: pointer;
-  overflow: hidden;
-  color: var(--dsw-alias-label-primary);
-  font-family: inherit;
-  font-size: 14px;
-  line-height: 22px;
-}
-.kb-sidebar-trigger:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-/* Rail trigger: the same 36x36 circle box as the other rail controls. */
-.kb-sidebar-trigger-rail {
-  width: 36px;
-  height: 36px;
-  margin: 8px 0 10px;
   justify-content: center;
-  gap: 0;
-  padding: 0;
-  border-radius: 50%;
 }
-.kb-sidebar-trigger-label {
-  overflow: hidden;
-  white-space: nowrap;
-}
-/* Open-item count badge on the sidebar entry (wide + rail states). */
-.kb-badge {
-  margin-left: auto;
-  min-width: 16px; height: 16px;
-  padding: 0 4px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 8px;
-  background: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-alias-bg-base);
-  font-size: 10px; line-height: 16px; font-weight: 600;
-}
-.kb-badge-rail {
+.kb-panel-badge {
   position: absolute;
-  top: -2px; right: -2px;
+  top: -6px; right: -8px;
   min-width: 14px; height: 14px;
+  padding: 0 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-sizing: border-box;
   border-radius: 7px;
-  font-size: 9px; line-height: 14px;
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-foreground);
+  font-size: 9px; line-height: 14px; font-weight: 600;
+  pointer-events: none;
 }
-.kb-sidebar-trigger-rail { position: relative; }
-.kb-overlay {
-  position: fixed; inset: 0; z-index: 50;
+/* The board page is the 'main' global panel's occupant: it fills the centre
+   column (no overlay positioning, no z-index — the frame sizes it). */
+.kb-panel {
   display: flex; flex-direction: column;
+  height: 100%; min-height: 0;
   background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -110,7 +75,7 @@ export const KANBAN_STYLES = `
 .kb-board-path {
   margin: 0 0 16px; font-size: 12px; line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
-  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-family: var(--dsw-font-markdown-code-font-family, var(--ds-font-family-code, ui-monospace, SFMono-Regular, monospace));
   word-break: break-all;
 }
 .kb-columns {
@@ -244,7 +209,7 @@ export const KANBAN_STYLES = `
   resize: vertical;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;
   padding: 8px 10px;
-  background: var(--dsw-alias-bg-input, transparent);
+  background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit; font-size: 13px; line-height: 18px;
 }
@@ -263,21 +228,30 @@ export const KANBAN_STYLES = `
 .kb-spec-active { color: var(--dsw-alias-button-primary-fill); font-size: 12px; }
 .kb-spec-body { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-top: 1px solid var(--dsw-alias-border-l2); }
 .kb-spec-intro { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+/* Spec-drift warning: the shell's warn panel vocabulary (state-warn-tertiary
+   fill, state-warn-label text, 20%-alpha state border) rather than a neutral
+   card — the previous interactive-bg-hover-danger TEXT color was a 5%-alpha
+   hover fill used as a foreground, i.e. unreadable in the light theme. */
 .kb-spec-warning {
   margin: 0; padding: 8px 10px; font-size: 12px; line-height: 18px;
-  color: var(--dsw-alias-interactive-bg-hover-danger);
-  border: 1px solid var(--dsw-alias-border-l3); border-radius: 8px;
-  background: var(--dsw-alias-bg-module);
+  color: var(--dsw-alias-state-warn-label);
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-warn-label) 20%, transparent);
+  border-radius: 8px;
+  background: var(--dsw-alias-state-warn-tertiary);
 }
 .kb-spec-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
 .kb-spec-input {
   width: 100%; box-sizing: border-box; resize: vertical;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;
-  padding: 8px 10px; background: var(--dsw-alias-bg-input, transparent);
+  padding: 8px 10px; background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; line-height: 18px;
 }
 .kb-spec-input:focus { outline: none; border-color: var(--dsw-alias-border-l3); }
-.kb-spec-monospace { font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, monospace); font-size: 12px; }
+/* Official monospace stack: ui-theme's base.css defines --ds-font-family-code
+   and exposes it as --dsw-font-markdown-code-font-family; --dsw-font-mono
+   was never a DSH token, so the previous declaration silently fell through to
+   the generic fallback list. */
+.kb-spec-monospace { font-family: var(--dsw-font-markdown-code-font-family, var(--ds-font-family-code, ui-monospace, SFMono-Regular, monospace)); font-size: 12px; }
 .kb-spec-source { font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-tertiary); word-break: break-word; }
 .kb-spec-saved { margin: 0; font-size: 12px; color: var(--dsw-alias-button-primary-fill); }
 .kb-spec-actions { display: flex; gap: 8px; }
@@ -286,12 +260,12 @@ export const KANBAN_STYLES = `
   color: var(--dsw-alias-label-tertiary);
 }
 .kb-empty { border: 1px dashed var(--dsw-alias-border-l3); border-radius: 12px; }
-.kb-error { color: var(--dsw-alias-interactive-bg-hover-danger); }
+.kb-error { color: var(--dsw-alias-state-error-primary); }
 .kb-archived {
   margin: 0 0 12px; padding: 8px 12px; font-size: 12px; line-height: 18px;
   color: var(--dsw-alias-label-secondary);
   border: 1px solid var(--dsw-alias-border-l3); border-radius: 8px;
-  background: var(--dsw-alias-bg-module);
+  background: var(--dsw-alias-bg-module-platform);
   word-break: break-all;
 }
 /* Card detail dialog (headless Modal): wider than the 380px default, with a
@@ -355,7 +329,7 @@ body .kb-detail-modal { width: min(560px, 100%); }
   margin: 0;
   padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px;
-  background: var(--dsw-alias-bg-module);
+  background: var(--dsw-alias-bg-module-platform);
   font-size: 13px; line-height: 22px;
   color: var(--dsw-alias-label-primary);
   white-space: pre-wrap; word-break: break-word;

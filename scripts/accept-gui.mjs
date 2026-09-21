@@ -3,8 +3,10 @@
  * (http://127.0.0.1:3080). Uses playwright's chromium (already installed).
  *
  * Checks:
- *  1. The sidebar footer shows the 「看板」 entry (a native primitives Button).
- *  2. Clicking it opens the full-screen board page with an OPAQUE background.
+ *  1. The sidebar's global-panels section shows the 「看板」 row (the shell's
+ *     button with our glyph inside it).
+ *  2. Clicking it renders the board panel in the centre column, opaque, with the
+ *     sidebar row marked as the selected panel.
  *  3. The three columns (todo / in_progress / done) render.
  *  4. Adding a card through the composer works and persists.
  *  5. Moving a card to done (via the status Menu) works.
@@ -36,45 +38,44 @@ try {
   // Let the web client boot its plugin tree.
   await page.waitForTimeout(4000)
 
-  // 1) Sidebar footer 「看板」 entry — a native primitives Button.
-  const kanbanButton = page.locator('button.kb-sidebar-trigger').first()
+  // 1) The global-panel entry in the sidebar: the shell owns the row button,
+  // our glyph (and its count badge) sits inside it. Locale-independent selector.
+  const kanbanButton = page.locator('button:has(.kb-panel-icon)').first()
   try {
     await kanbanButton.waitFor({ state: 'visible', timeout: 15000 })
-    record('sidebar 「看板」 entry visible', true)
+    record('sidebar global-panel 「看板」 entry visible', true)
   } catch {
-    record('sidebar 「看板」 entry visible', false, 'button.kb-sidebar-trigger not found')
+    record('sidebar global-panel 「看板」 entry visible', false, 'button:has(.kb-panel-icon) not found')
   }
 
-  // 1b) It matches the Settings footer trigger (34px compact row, 12px radius,
-  // left-aligned) and carries an icon.
+  // 1b) It is a panel-row button carrying our icon, and it is not the selected
+  // panel yet (the Conversation is on stage at boot).
   if (await kanbanButton.isVisible().catch(() => false)) {
-    const style = await kanbanButton.evaluate(el => {
-      const s = getComputedStyle(el)
-      return { height: s.height, radius: s.borderRadius, font: s.fontSize, padLeft: s.paddingLeft }
-    })
-    const matchesTrigger = style.height === '34px' && style.radius === '12px' && style.font === '14px' && style.padLeft === '10px'
     const hasIcon = await kanbanButton.locator('svg').count()
-    record('sidebar entry matches the Settings trigger (left-aligned + icon)', matchesTrigger && hasIcon >= 1, JSON.stringify(style) + ` icon=${hasIcon}`)
+    const current = await kanbanButton.getAttribute('aria-current')
+    record('panel entry carries the board glyph and is not selected', hasIcon >= 1 && current === null, `icon=${hasIcon} aria-current=${String(current)}`)
   }
 
-  // 2) Click to open the board page.
+  // 2) Click to open the board panel: the centre column becomes the board.
   await kanbanButton.click().catch(() => {})
   await page.waitForTimeout(1500)
-  const overlay = page.locator('.kb-overlay').first()
+  const panel = page.locator('.kb-panel[data-testid="kanban-page"]').first()
   let pageOpened = false
   try {
-    await overlay.waitFor({ state: 'visible', timeout: 10000 })
+    await panel.waitFor({ state: 'visible', timeout: 10000 })
     pageOpened = true
-    record('full-screen board page opens', true)
+    record('board panel renders in the centre column', true)
   } catch {
-    record('full-screen board page opens', false, '.kb-overlay not visible')
+    record('board panel renders in the centre column', false, '.kb-panel[data-testid="kanban-page"] not visible')
   }
 
   if (pageOpened) {
-    // 2b) The overlay is OPAQUE (styles loaded) — not transparent.
-    const bg = await overlay.evaluate(el => getComputedStyle(el).backgroundColor).catch(() => '')
+    // 2b) The panel is OPAQUE (styles loaded) and fills the column.
+    const bg = await panel.evaluate(el => getComputedStyle(el).backgroundColor).catch(() => '')
     const opaque = bg !== '' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent'
-    record('board page has an opaque background', opaque, bg)
+    record('board panel has an opaque background', opaque, bg)
+    const selected = await page.locator('button[aria-current="page"]:has(.kb-panel-icon)').count().catch(() => 0)
+    record('the sidebar marks the board row as the selected panel', selected === 1, `aria-current=page rows: ${selected}`)
 
     // 3) Columns render.
     const cols = page.locator('.kb-column')
@@ -119,7 +120,7 @@ try {
     let deleted = false
     try {
       await doneCard.locator('button[aria-label="Remove"], button[aria-label="删除"]').click()
-      await page.locator('.kb-overlay [role="dialog"]').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
+      await page.locator('.kb-panel [role="dialog"]').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
       await page.waitForTimeout(500)
       const confirm = page.locator('button', { hasText: /^Delete$|^删除$/ }).last()
       await confirm.waitFor({ state: 'visible', timeout: 5000 })

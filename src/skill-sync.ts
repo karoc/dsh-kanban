@@ -1,11 +1,14 @@
 /**
- * kanban-use skill self-heal installation (host half).
+ * kanban-use skill copy installer (host half) — the FALLBACK delivery path.
  *
- * The skill ships inside the npm package (files: skills/kanban-use/SKILL.md),
- * so `dsh plugin add/update dsh-kanban` puts the file on disk automatically.
- * But the AGENT skills directory (~/.agents/skills) is a per-machine local
- * asset that npm does NOT touch — so every dsh web start, this module makes
- * sure the skill is present there, mirroring the plugin's copy.
+ * Preferred path (DSH ≥ 0.1.6, i.e. when `ctx.skills` exists): src/skill-register.ts
+ * serves the skill out of the installed package, so the skill version always
+ * equals the plugin version and no per-machine copy is needed. This module is
+ * used only when that service is absent (older shells, or a profile without the
+ * skill packages): the skill ships inside the npm package (files:
+ * skills/kanban-use/SKILL.md), so `dsh plugin add/update dsh-kanban` puts the
+ * file on disk automatically — but ~/.agents/skills is a per-machine local asset
+ * that npm does NOT touch, so the plugin makes sure it is present there too.
  *
  * Sync policy (four states, driven by the `skill-version` fingerprint in the
  * SKILL.md frontmatter — bump it whenever the skill CONTENT changes):
@@ -28,12 +31,6 @@
  * The manual dev command remains `pnpm install:skill` (repo checkout) or
  * `node scripts/install-skill.mjs --copy` (anywhere, incl. inside the
  * installed package — the script is shipped too).
- *
- * ⚠️ Tree-shaking: this module is KEPT in the bundle because the self-heal
- * runs as a module top-level side effect below, and src/index.ts imports it
- * as a side-effect import ('./skill-sync.ts'). A plain "call inside apply()"
- * was rolled out entirely by rolldown (same trap as §5 styles); do not move
- * the self-heal call into a function that only apply() references.
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -114,7 +111,9 @@ export async function ensureSkillInstalled(home = homedir()): Promise<void> {
   }
 }
 
-// Module top-level side effect: self-heal on every bundle load (= every dsh
-// web start). Keeps this module alive against rolldown tree-shaking AND runs
-// the install without waiting for apply(); fire-and-forget, never throws.
-void ensureSkillInstalled()
+// ⚠️ Tree-shaking: this module used to run ensureSkillInstalled() as a module
+// top-level side effect, because a bare "call inside apply()" was rolled out of
+// the bundle by rolldown. It is now only reached through the fallback branch of
+// apply() in src/index.ts, so the bundle check that guards that (the
+// verify-skill-runtime script, which loads lib/index.js and asserts the skill
+// path end to end) is what keeps this code alive — do not remove it.

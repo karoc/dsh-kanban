@@ -6,8 +6,9 @@
  * Upstream source (deepseek-harness):
  *   - note classes:     scripts/agent-note-tree.ts  -> AGENT_NOTE_CLASSES
  *   - note format:      scripts/verify-agent-note-format.ts  (headers + sections)
- *   - non-trivial rule: AGENTS.md  ("Non-trivial changes MUST include an Agent Note…")
- *   - checked at commit: 47f943859bef60e4160492346772ded9b24f765a
+ *   - non-trivial rule: .agents/notes/README.md ("When to write one"; AGENTS.md carries
+ *     the one-line pointer to it)
+ *   - checked at commit: ddefc45fbc7f8e46dd73185e68295696d1297887
  *   Run `pnpm check:spec` (scripts/check-note-spec.mjs) to diff these defaults
  *   against a local dsh checkout and catch upstream changes; bump
  *   NOTE_SPEC_VERSION when a default below changes.
@@ -22,7 +23,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 
 /** Current default spec revision. Bump when a default below changes. */
-export const NOTE_SPEC_VERSION = 1
+export const NOTE_SPEC_VERSION = 2
 
 /** The closed set of Agent Note classes (mirrors DSH's classification gate). */
 export const DEFAULT_NOTE_CLASSES = ['feature', 'bug-fix', 'simplification', 'architecture', 'process', 'testing'] as const
@@ -50,13 +51,22 @@ export const DEFAULT_NOTE_FORMAT = [
   '',
 ].join('\n')
 
-/** Default "non-trivial change" definition (mirrors DSH's AGENTS.md rule). */
+/**
+ * Default "non-trivial change" definition (mirrors DSH's note-scope rule, which
+ * moved from a root AGENTS.md sentence to `.agents/notes/README.md#when-to-write-one`
+ * — "lasting decision rationale that code, tests, and existing documentation do
+ * not explain"; the AGENTS.md line is now a pointer to it).
+ */
 export const DEFAULT_NON_TRIVIAL_DEFINITION =
-  'A change is NON-TRIVIAL (so it needs a note) when it changes behavior, architecture, '
-  + 'cross-file or cross-package conventions, process or tooling, test strategy, on-disk '
-  + 'storage format, wire/protocol format, or configuration format — or makes any decision '
-  + 'a maintainer could reasonably revisit later. Mechanical or local-only edits (renames, '
-  + 'formatting, pure comments, no behavior change) are exempt.'
+  'A change is NON-TRIVIAL (so it needs a note) only when it carries lasting decision '
+  + 'rationale that code, tests, and existing documentation do not explain — behavior, '
+  + 'architecture, cross-file or cross-package conventions, process or tooling, test '
+  + 'strategy, on-disk storage format, wire/protocol format, or configuration format, or '
+  + 'any decision a maintainer could reasonably revisit later. Mechanical or local edits '
+  + 'are exempt, including local UI presentation and interaction changes. Updating the '
+  + 'note that already owns the decision satisfies the rule — do not create a duplicate; '
+  + 'and never edit an existing note into a DIFFERENT decision (supersede it with a new '
+  + 'note and cross-link the two).'
 
 /** A per-workspace override of one or more spec defaults. */
 export interface NoteSpecOverrides {

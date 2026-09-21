@@ -11,7 +11,7 @@
 `dsh-kanban` 把计划和待办**沉淀到工作区根目录的一个 `KANBAN.json` 文件**（可进 git、可手动编辑、跨会话保留），并给你两个入口同时维护它：
 
 - **模型入口**：4 个模型工具（`board_list` / `board_add` / `board_update` / `board_remove`），模型在对话中主动把计划步骤、待办记进看板；
-- **Web 入口**：dsh Web GUI 侧边栏新增「思磨力看板」按钮，点开是一个**全屏三列看板页**（待办 / 进行中 / 已完成），支持查看、勾选移动状态、新增、删除。
+- **Web 入口**：dsh Web GUI 侧边栏的**全局面板**区新增「思磨力看板」入口，中列渲染**三列看板页**（待办 / 进行中 / 已完成），支持查看、勾选移动状态、新增、删除。
 
 同一个 `KANBAN.json` 由模型工具和 Web 页共享读写，所以**模型写进去的，页面能看到；你在页面勾掉的，模型下次也读得到**。
 
@@ -49,7 +49,7 @@
 1. **看板使用指引**（`ctx.systemPrompt.section`）：告诉模型"看板是什么、何时该记、和 todo_write 的分工"，以及**卡片完整度契约**——每张卡必须有 rationale（为什么，创建时写）；done 卡必须三字段（做了什么/为什么/放弃了什么）齐备。
 2. **会话开始自动注入**（`ctx.systemPrompt.context`）：未完成项摘要自动进模型上下文（见上）；缺字段的卡会带 `(缺:…)` 标注，接手的会话看到就能补。
 3. **收尾纪律**：指引明确要求——**每轮工作结束**，模型必须把完成项移到 done、把新后续加为 todo、更新 summaries，**不留 stale 的 in_progress**，让看板成为诚实的跨会话交接。
-4. **用户侧可见性**：侧边栏「思磨力看板」入口显示**未完成计数角标**（`/kanban/counts` 端点，工作区最近活跃优先，订阅工作区变更即时刷新）；看板页打开时**每 15s 自动刷新**，模型/其他会话写入后自动更新。
+4. **用户侧可见性**：侧边栏全局面板区的「思磨力看板」入口图标带**未完成计数角标**（`/kanban/counts` 端点，工作区最近活跃优先，订阅工作区变更即时刷新）；看板页显示期间**每 15s 自动刷新**，模型/其他会话写入后自动更新。
 
 **数据安全承诺**：插件**只写不删**看板/笔记文件；没有启动清理、定时清理、安装清理。卡片只能被显式 `board_remove` / Web 删除按钮移除（删除需二次确认）；超量 done 卡片是**归档**（移到 `.agents/notes/archive.json`），永不删除。所有数据在你**工作区目录**内（可进 git、可手改）。
 
@@ -74,7 +74,7 @@
 |---|---|
 | 笔记分类 | `scripts/agent-note-tree.ts` → `AGENT_NOTE_CLASSES` |
 | 笔记格式 | `scripts/verify-agent-note-format.ts` |
-| 非平凡变更定义 | 根 `AGENTS.md`（"Non-trivial changes MUST include an Agent Note…"） |
+| 非平凡变更定义 | `.agents/notes/README.md` → "When to write one"（根 `AGENTS.md` 只留一行指针） |
 
 - **插件自带默认**（随版本更新）：`src/note-spec.ts` 固化默认分类、格式模板、非平凡定义，发布后开箱即用；
 - **用户可覆盖**：Web 看板页的「Agent Note spec」区提供**三个输入框**，可粘贴 dsh 上游最新内容替换默认；覆盖存工作区 `.agents/notes/overrides.json`；
@@ -85,8 +85,8 @@
 
 #### 同步机制（开发期检查 + 发版）
 
-- **来源锚定**：`src/note-spec.ts` 顶部注明复刻自 deepseek-harness（上游 commit `47f943859bef60e4160492346772ded9b24f765a`）；
-- **开发期检查**：`pnpm check:spec`（`scripts/check-note-spec.mjs`）读取本机 dsh 源码的规范常量（`agent-note-tree.ts` 的分类、`verify-agent-note-format.ts` 的格式、`AGENTS.md` 的非平凡规则），与插件默认逐项对比——上游一改，跑一次就报差异，提示更新 `src/note-spec.ts` 并 bump `NOTE_SPEC_VERSION`；
+- **来源锚定**：`src/note-spec.ts` 顶部注明复刻自 deepseek-harness（上游 commit `ddefc45fbc7f8e46dd73185e68295696d1297887`）；
+- **开发期检查**：`pnpm check:spec`（`scripts/check-note-spec.mjs`）读取本机 dsh 源码的规范常量（`agent-note-tree.ts` 的分类、`verify-agent-note-format.ts` 的格式、`.agents/notes/README.md` 的笔记范围规则 + 根 `AGENTS.md` 指向它的那一行），与插件默认逐项对比——上游一改，跑一次就报差异，提示更新 `src/note-spec.ts` 并 bump `NOTE_SPEC_VERSION`；
 - **发版同步**：作者更新默认常量后发布新版本；用户 `dsh plugin update dsh-kanban` 拿到新默认（若用户自行覆盖过，页面会按"更新警告"提示覆盖会被重置）。
 
 `check:spec` 依赖本机 dsh 源码路径，是**开发期工具**（不随发布分发、不进用户 `test`）。
@@ -97,10 +97,11 @@
 
 ### Web 看板页（Client 端）
 
-![Web 看板页：全屏三列看板（待办 / 进行中 / 已完成）](docs/screenshots/board-page.png)
+![Web 看板页：三列看板（待办 / 进行中 / 已完成）](https://raw.githubusercontent.com/karoc/dsh-kanban/main/docs/screenshots/board-page.png)
 
-- 侧边栏底部「思磨力看板」入口（`sidebar.footer.action`），**显示未完成计数角标**（有 todo/in_progress 卡片时显示数字，>99 显示 "99+"）；
-- 点开是全屏三列看板：**待办 / 进行中 / 已完成**，每列带卡片计数；
+- 侧边栏**全局面板**区「思磨力看板」入口（`sidebar.panellist`），图标上带**未完成计数角标**（有 todo/in_progress 卡片时显示数字，>99 显示 "99+"）；
+- 看板是**全局面板**（DSH 0.1.6 起的官方缝，内置「插件」页同款）：选中入口后中列换成看板（会话让位），页头「返回会话」切回（`ctx.layout.selectPanel(null)`）；不再有自绘按钮、全屏 overlay 与 z-index 抢占；
+- 三列看板：**待办 / 进行中 / 已完成**，每列带卡片计数；
 - **工作区选择器**：顶部可切换任意工作区（每个工作区有独立 KANBAN.json），默认跟随当前会话工作区；
 - 每张卡片可：下拉改状态（含勾选完成）、**删除（需二次确认 Modal，防误删）**；卡片显示模型填写的"做了什么/为什么/放弃了什么"三字段，模型创建的卡片带"打开来源会话"按钮（跳到处理会话）；
 - **两行截断预览**：卡片上三个"什么"字段每个最多显示两行，超出部分以 `...` 省略，卡片高度可控、扫读高效；
@@ -171,9 +172,9 @@ dsh plugin --profile web remove dsh-kanban   # 同时移除依赖和 bundle 层�
 
 ## 使用
 
-1. 安装并重启 `dsh web` 后，侧边栏底部出现「思磨力看板」按钮；
+1. 安装并重启 `dsh web` 后，侧边栏「全局面板」区出现「思磨力看板」入口；
 2. 和模型对话时让它用 `board_add` 记录计划步骤（例如"把 xxx 记进看板"），模型会写入当前工作区的 `KANBAN.json`；
-3. 随时点侧边栏「思磨力看板」查看三列视图；勾选完成 / 改状态 / 新增 / 删除都可以在页面上直接做；
+3. 随时点侧边栏「思磨力看板」查看三列视图；勾选完成 / 改状态 / 新增 / 删除都可以在页面上直接做；点会话行或「返回会话」回到对话；
 4. 换分支、开新会话后，看板数据依然在——它就是工作区里的一个文件。
 
 ## 卡片完整度与 kanban-use 技能
@@ -186,7 +187,12 @@ dsh plugin --profile web remove dsh-kanban   # 同时移除依赖和 bundle 层�
   - **Web 看板页**（卡片字段下方黄色警告行「缺字段：…」，用户侧同样可见）。
 - **`done` 卡片必须自解释**：`summary`（做了什么）+ `rationale`（为什么）+ `rejected`（放弃了什么）三字段齐备，完成的活才是诚实的交接。
 
-**kanban-use 技能**（`skills/kanban-use/SKILL.md`）是这套纪律的深度手册——字段语义、好/坏卡片对比、创建 → 推进 → 收尾全流程、关闭检查清单与模板。系统提示引导会把模型指向它。**安装与升级都是自动的**：技能随 npm 包分发（tarball 内含 `skills/kanban-use/SKILL.md` 与 `scripts/install-skill.mjs`），插件 host 半区每次 `dsh web` 启动时检查 `~/.agents/skills/kanban-use/SKILL.md`。技能 frontmatter 里的 `skill-version` 指纹（内容变更时递增）驱动同步策略：缺失 → 复制包内版本；一致 → 不动；**同版本但内容不同 → 保留你的本地版本**（这是你对当前版本的编辑）并提示；**旧/异版本 → 覆盖同步**（这是上一次安装留下的旧包内容，即升级路径）。所以「`dsh plugin add/update dsh-kanban` + 必需的重启」就够了，任何机器都生效。手动命令仍保留（仓库开发 / 强制同步）：
+**kanban-use 技能**（`skills/kanban-use/SKILL.md`）是这套纪律的深度手册——字段语义、好/坏卡片对比、创建 → 推进 → 收尾全流程、关闭检查清单与模板。系统提示引导会把模型指向它。**技能的投递分两条路**：
+
+- **首选（DSH ≥ 0.1.6，`ctx.skills` 存在）**：host 半区把包内 `skills/kanban-use/SKILL.md` 直接注册进 shell 的技能注册表（`ctx.skills.register`，`source: 'runtime'`）。技能版本 = 插件版本，不存在"旧副本"，也不会因为磁盘上某份 frontmatter 坏掉而静默消失；按 DSH 的优先级（项目 > runtime > 用户），`~/.agents/skills` 里的旧副本**不会**盖住它，而工作区里的 `.agents/skills`（或 `.dsh/skills`）副本仍然优先——这就是自定义覆盖的官方方式。
+- **兜底（旧 shell，或 profile 没有技能服务）**：退回复制安装——技能随 npm 包分发（tarball 内含 `skills/kanban-use/SKILL.md` 与 `scripts/install-skill.mjs`），启动时检查 `~/.agents/skills/kanban-use/SKILL.md`，由 frontmatter 里的 `skill-version` 指纹驱动：缺失 → 复制；一致 → 不动；**同版本但内容不同 → 保留你的本地版本**并提示；**旧/异版本 → 覆盖同步**。
+
+两条路都不需要用户做额外操作：「`dsh plugin add/update dsh-kanban` + 必需的重启」就够了。手动命令仍保留（仓库开发 / 强制同步）：
 
 ```sh
 pnpm install:skill            # symlink skills/kanban-use → ~/.agents/skills/kanban-use
@@ -204,25 +210,29 @@ tsdown.config.ts      # 自包含构建：node 半区 + 模块表客户端 bundl
 src/board-core.ts     # KANBAN.json 领域：读写、校验、卡片 CRUD、
                       #   missingCardFields 完整度规则（全表面共享）
 src/index.ts          # Host 半区：4 个模型工具 + /kanban/api webServer 路由
-src/client/index.ts   # client apply：注册侧边栏入口 + 全屏看板页
+src/client/index.ts   # client apply：注册全局面板（侧边栏图标 + 'main' 占位）
 src/client/BoardPage.tsx   # 三列看板页组件（含缺字段提示行）
-src/client/KanbanSurface.tsx # 侧边栏按钮 + overlay 包装
-src/client/workspace-pick.ts # 最近活跃工作区推导（纯函数，带单测）
-src/client/board-state.ts   # 页面开关的模块级 observable
+src/client/KanbanSurface.tsx # 面板图标 + 'main' 面板包装
+src/client/workspace-pick.ts # 当前会话 + 最近活跃工作区推导（纯函数，带单测）
+src/client/board-counts.ts   # 图标角标背后的 /kanban/counts 轮询
 src/client/locales.ts       # 中英文案
 src/client/styles.ts        # --dsw-alias-* 设计令牌样式
-src/skill-sync.ts           # Host 半区：kanban-use 技能自愈安装（每次 dsh web 启动检查）
-skills/kanban-use/SKILL.md  # kanban-use 技能（随 npm 包分发，启动时自动安装）
+src/skill-register.ts       # Host 半区：经 ctx.skills 投递技能（DSH ≥ 0.1.6）
+src/skill-sync.ts           # Host 半区：无技能服务时的复制兜底
+skills/kanban-use/SKILL.md  # kanban-use 技能（随 npm 包分发）
 scripts/check-card-discipline.mjs # 开发门禁：引导/schema/技能对完整度口径一致
 scripts/audit-cards.mjs          # KANBAN.json 完整度审计（[workspace] [--fail]）
 scripts/install-skill.mjs        # 把技能 symlink/复制进 ~/.agents/skills（随包分发）
-scripts/verify-skill-sync.mjs    # 技能自愈三态验证（并入 pnpm test）
+scripts/check-tokens.mjs         # 开发门禁：src 里每个 --dsw-alias-* 令牌都必须在已装 DSH 主题里有定义
+scripts/check-client-wiring.mjs  # 开发门禁：面板 id/key 连线未被改坏
+scripts/verify-skill-sync.mjs    # 复制兜底三态验证（并入 pnpm test）
+scripts/verify-skill-runtime.mjs # 对真实 skill registry 验证 runtime 注册与优先级（并入 pnpm test）
 docs/screenshots/board-page.png  # Web 看板页截图（README 配图）
 ```
 
 ## 为什么做成外部插件
 
-dsh 官方更新的覆盖范围是仓库内的内置包；**外部 bundle 由 `dsh plugin` 装进用户 profile，官方升级不会触碰它**（与 `dsh-model-reasoning` 同一模式）。插件只用 dsh 对外稳定的能力面：模型工具注册（`ctx.tools`）、webServer 路由注册、以及 Web 侧边栏 / overlay 槽位——官方更新无法覆盖它。
+dsh 官方更新的覆盖范围是仓库内的内置包；**外部 bundle 由 `dsh plugin` 装进用户 profile，官方升级不会触碰它**（与 `dsh-model-reasoning` 同一模式）。插件只用 dsh 对外稳定的能力面：模型工具注册（`ctx.tools`）、webServer 路由注册、技能注册表（`ctx.skills`）、以及 Web 全局面板槽位（`sidebar.panellist` + `main`）——官方更新无法覆盖它。
 
 ## 已知限制（第一版）
 
@@ -239,17 +249,22 @@ pnpm bundle    # 产出 lib/index.js + lib/client.js
 ```
 
 - `src/client/` 是浏览器插件；client bundle 保持 `@deepseek-ai/*` + `react` external（运行时从 loader 模块表解析），其余内联。
-- UI 使用 `--dsw-alias-*` 设计令牌，命名空间 `kb-` 前缀避免冲突。
+- UI 使用 `--dsw-alias-*` 设计令牌，命名空间 `kb-` 前缀避免冲突；`pnpm check:tokens` 会对已装 DSH 主题逐个校验（未知的 CSS 自定义属性**不会报错**，只会渲染成"什么都没有"）。
+- 看板是 DSH 的**全局面板**：`sidebar.panellist` 画侧边栏行，keyed `main` 槽承载页面。`pnpm check:wiring` 钉住这条连线，真机脚本在浏览器里验证。
 
 ## 验证
 
 ```sh
 pnpm test       # tsc --noEmit 类型检查 + 14 个 KANBAN.json 领域单测
-                #   + 8 个 workspace-pick 推导单测 + Host 工具冒烟
+                #   + 13 个 workspace-pick / 当前会话推导单测
+                #   + 令牌漂移门禁（自带负向对照）+ 面板连线门禁
+                #   + Host 工具冒烟 + 技能 runtime 注册（对真实 registry）
 pnpm typecheck  # 仅类型检查（tsc --noEmit）
 pnpm verify     # 4 个 board 工具注册 + board_add 端到端落盘
 pnpm accept     # 对运行中的 dsh web (http://127.0.0.1:3080) 做 GUI 验收：
-                #   侧边栏入口（原生 DSH 按钮）→ 全屏三列页（不透明背景）→ 新增/移动/删除
+                #   侧边栏全局面板行 → 中列渲染看板（不透明、行标记为选中）→ 新增/移动/删除
+node scripts/capture-board-page.mjs  # 从真机 GUI 重拍 README 配图
+                #   （只截看板面板，绝不包含侧边栏的会话列表）
 ```
 
 自 DSH 0.1.2-alpha.2 起，Web GUI 用浏览器会话 cookie 保护首页

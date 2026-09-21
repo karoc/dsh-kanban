@@ -14,6 +14,7 @@ import type { ReactNode } from 'react'
 import {
   Button,
   IconChevronDownOutline14,
+  IconChevronLeftOutline14,
   IconCloseOutline16,
   IconGoalOutline16,
   IconInspectOutline12,
@@ -184,7 +185,7 @@ function formatTimeWithSeconds(epochMs: number): string {
   return `${formatTime(epochMs)}:${pad(date.getSeconds())}`
 }
 
-/** The board page component (rendered inside the shell.overlay seat). */
+/** The board page component (the board global panel's `main`-slot occupant). */
 export function BoardPage({ api, workspace, workspaces, onClose, t, openSession }: BoardPageProps) {
   const [cards, setCards] = useState<BoardCardView[]>([])
   const [path, setPath] = useState<string | undefined>(undefined)
@@ -298,7 +299,7 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
   // otherwise show the empty hint.
   if (selectedWorkspace === undefined) {
     return (
-      <div className="kb-overlay">
+      <div className="kb-panel">
         <BoardHeader onClose={onClose} t={t} />
         <div className="kb-body">
           {workspaces.length > 0 ? (
@@ -319,7 +320,7 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
   }
 
   return (
-    <div className="kb-overlay" data-testid="kanban-page">
+    <div className="kb-panel" data-testid="kanban-page">
       <BoardHeader onClose={onClose} t={t} path={path} lastUpdated={lastUpdated} onRefresh={() => { void refresh() }} />
       <div className="kb-body">
         {workspaces.length > 0 && (
@@ -845,7 +846,7 @@ function CardDetail(props: {
   )
 }
 
-/** Shared header strip of the overlay (native DSH ghost buttons). */
+/** Shared header strip of the board panel (native DSH ghost buttons). */
 function BoardHeader(props: {
   onClose: () => void
   t: BoardPageProps['t']
@@ -870,8 +871,10 @@ function BoardHeader(props: {
           {props.t('refresh')}
         </Button>
       )}
-      <Button variant="ghost" size="md" icon={<IconCloseOutline16 />} onClick={props.onClose}>
-        {props.t('close')}
+      {/* Leaves the panel: selecting the Conversation restores the centre
+          column (the sidebar's session rows do the same). */}
+      <Button variant="ghost" size="md" icon={<IconChevronLeftOutline14 />} onClick={props.onClose}>
+        {props.t('backToChat')}
       </Button>
     </header>
   )

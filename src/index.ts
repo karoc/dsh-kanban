@@ -48,15 +48,17 @@ import {
   type BoardStatus,
   type BoardView,
 } from './board-core.ts'
-// Side-effect import: keeps skill-sync alive against rolldown tree-shaking
-// (the self-heal runs as a module top-level side effect there) — a bare
-// import of the names was rolled out entirely.
-import './skill-sync.ts'
+// Fallback skill delivery (copy into ~/.agents/skills) + the parser/paths the
+// verification scripts pin against the shipped SKILL.md.
 import { ensureSkillInstalled, skillSourceFile, skillTargetFile } from './skill-sync.ts'
+// Runtime skill registration (preferred delivery path) + its exported parser,
+// which scripts/verify-skill-runtime.mjs pins against the shipped SKILL.md.
+import { registerSkillRuntime, parseSkillMarkdown, type ContextLike } from './skill-register.ts'
 
 // Exported for verification (scripts/verify-skill-sync.mjs) — the module
 // registry only loads lib/index.js; the bundle keeps these exports.
 export { ensureSkillInstalled, skillSourceFile, skillTargetFile }
+export { registerSkillRuntime, parseSkillMarkdown }
 import {
   DEFAULT_NON_TRIVIAL_DEFINITION,
   DEFAULT_NOTE_CLASSES,
@@ -297,7 +299,27 @@ function boardSnapshotText(context: { agent?: { session: { header: { cwd?: strin
   const tail = incomplete > 0
     ? ['', `${incomplete} open card(s) are missing fields (缺) — fill the flagged 为什么 (and other fields) when you pick the work up.`]
     : []
-  return 'Current workspace board (KANBAN.json) — open items:\n' + [...lines, ...tail].join('\n')
+  return literalPromptText('Current workspace board (KANBAN.json) — open items:\n' + [...lines, ...tail].join('\n'))
+}
+
+/**
+ * Neutralize `{{` in literal text contributed to a DYNAMIC prompt context.
+ *
+ * DSH interpolates every context contribution when it renders the runtime
+ * snapshot (`renderContextSections`), and any `{{name}}` it cannot resolve —
+ * an unknown variable, a lowercase-name violation, an unmatched pair — throws,
+ * which fails the snapshot for EVERY request while such a card is open. Card
+ * titles are model- and user-authored, so `修复 {{TOKEN}} 渲染` on the board
+ * used to break assembly outright (reproduced against the built bundle before
+ * this guard existed). Contexts have no `interpolate: false` opt-out (that
+ * option exists on sections only), so the sequence itself has to go: a
+ * zero-width space keeps the braces visually intact for the model while making
+ * the text opaque to the interpolator.
+ * @param text - literal prompt text that may contain user data.
+ * @returns the same text with every `{{` broken apart.
+ */
+export function literalPromptText(text: string): string {
+  return text.replaceAll('{{', '{\u200b{')
 }
 
 /** Execute the human `/kanban` command against the receiving agent's workspace. */
@@ -485,16 +507,21 @@ async function listAgentNotes(cwd: string): Promise<string[]> {
 
 /** Register the four model-facing board tools. */
 export function apply(ctx: Context): void {
-  // Skill self-heal: make sure the kanban-use skill (shipped in this package)
-  // is present under ~/.agents/skills — new installs, plugin updates, and new
-  // machines get it automatically on the restart that installs require.
+  // Skill delivery. Preferred: hand the packaged kanban-use skill to the
+  // shell's own registry (DSH ≥ 0.1.6), so the skill version always equals the
+  // plugin version and a stale ~/.agents copy cannot shadow it. Fallback (older
+  // shells, profiles without the skill service): copy the shipped file into
+  // ~/.agents/skills, which is what 0.2.x did unconditionally.
   // Fire-and-forget: failure only warns, never blocks plugin load.
-  void ensureSkillInstalled()
+  if (!registerSkillRuntime(ctx as unknown as ContextLike)) void ensureSkillInstalled()
   // Tell the model when/why to use the board (tool-guidance range 100-199).
   ctx.systemPrompt.section({
     name: 'tool:board',
     order: 113,
     text: BOARD_GUIDANCE,
+    // Literal prose, not a template: no `{{variable}}` may be substituted here
+    // (or throw if one is ever introduced by an edit).
+    interpolate: false,
   })
   // Session-start board snapshot: inject the workspace's open items so the
   // model sees the board on every assembly without remembering to board_list.
@@ -673,10 +700,8 @@ export function apply(ctx: Context): void {
     name: 'note_add',
     description: 'Write an Agent Note documenting a NON-TRIVIAL change, at '
       + '.agents/notes/implemented/<class>/<date>-<topic>.md (mirrors the DeepSeek Harness '
-      + 'repository discipline). A change is non-trivial when it changes behavior, '
-      + 'architecture, cross-file/cross-package conventions, process or tooling, test '
-      + 'strategy, storage/wire/config format, or makes a decision a maintainer could '
-      + 'reasonably revisit. Call this AFTER completing such a change, alongside any board '
+      + `repository discipline). ${DEFAULT_NON_TRIVIAL_DEFINITION} `
+      + 'Call this AFTER completing such a change, alongside any board '
       + 'cards — the note records the why and what was rejected that the code cannot. '
       + 'Write at DSH engineering depth: the Decision states shipped reality in the present '
       + 'tense (concrete names, contracts, boundaries — not a summary); include negative '

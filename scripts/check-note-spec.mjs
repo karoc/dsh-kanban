@@ -11,8 +11,9 @@
  * Upstream anchor (source of truth):
  *   - note classes:     <dsh>/scripts/agent-note-tree.ts        -> AGENT_NOTE_CLASSES
  *   - note format:      <dsh>/scripts/verify-agent-note-format.ts -> # Agent Note: / Status / REQUIRED
- *   - non-trivial rule: <dsh>/AGENTS.md                          -> "Non-trivial changes MUST include…"
- *   - checked at commit: 47f943859bef60e4160492346772ded9b24f765a
+ *   - note scope rule:  <dsh>/.agents/notes/README.md            -> "When to write one"
+ *     (a root AGENTS.md sentence used to carry it; that line is now a pointer)
+ *   - checked at commit: ddefc45fbc7f8e46dd73185e68295696d1297887
  *
  * Usage: node scripts/check-note-spec.mjs [path-to-dsh-repo]
  * Exit 0 when in sync (or only expected re-wordings); 1 when upstream changed.
@@ -41,6 +42,7 @@ const report = (ok, what, detail) => {
 const treeSrc = readFileSync(resolve(DSH_ROOT, 'scripts', 'agent-note-tree.ts'), 'utf8')
 const formatSrc = readFileSync(resolve(DSH_ROOT, 'scripts', 'verify-agent-note-format.ts'), 'utf8')
 const agentsMd = readFileSync(resolve(DSH_ROOT, 'AGENTS.md'), 'utf8')
+const notesReadme = readFileSync(resolve(DSH_ROOT, '.agents', 'notes', 'README.md'), 'utf8')
 
 const upstreamClasses = arrayLiteral(treeSrc, 'AGENT_NOTE_CLASSES')
 
@@ -53,16 +55,30 @@ const implementedRequired = (() => {
 })()
 const bannedImplemented = /Proposal\b/.test(formatSrc)
 
-// Non-trivial anchor: a distinctive phrase from AGENTS.md.
-const nonTrivialAnchor = 'Non-trivial changes MUST include an Agent Note'
-const upstreamHasNonTrivial = agentsMd.includes(nonTrivialAnchor)
+// Note-scope anchors. The rule lives in .agents/notes/README.md ("When to write
+// one"); AGENTS.md keeps a one-line pointer to it and the paragraph must exist.
+const scopeAnchors = [
+  'When to write one',
+  'lasting decision rationale that code, tests, and existing documentation do not explain',
+  'Mechanical or local edits',
+  'do not create a duplicate',
+]
+const missingScopeAnchors = scopeAnchors.filter(anchor => !notesReadme.includes(anchor))
+const agentsPointerAnchor = 'durable decision rationale'
+const upstreamHasNonTrivial = missingScopeAnchors.length === 0 && agentsMd.includes(agentsPointerAnchor)
 
 // ── Plugin constants ────────────────────────────────────────────────────────
 const pluginSrc = readFileSync(PLUGIN_SPEC, 'utf8')
 const pluginClasses = arrayLiteral(pluginSrc, 'DEFAULT_NOTE_CLASSES')
 const pluginHasTitlePrefix = /# Agent Note:/.test(pluginSrc)
 const pluginNonTrivial = pluginSrc.includes('NON-TRIVIAL')
-const pluginNonTrivialAnchor = pluginSrc.includes('cross-file or cross-package')
+const pluginScopeAnchors = [
+  'cross-file or cross-package',
+  'lasting decision rationale',
+  'Mechanical or local edits',
+  'do not create a duplicate',
+]
+const pluginMissingScopeAnchors = pluginScopeAnchors.filter(anchor => !pluginSrc.includes(anchor))
 
 // ── Compare ────────────────────────────────────────────────────────────────
 report(
@@ -89,16 +105,21 @@ report(
 )
 report(
   upstreamHasNonTrivial,
-  'upstream AGENTS.md still states the non-trivial rule',
-  `anchor="${nonTrivialAnchor}"`,
+  'upstream states the note-scope rule (notes README) with AGENTS.md pointing at it',
+  missingScopeAnchors.length === 0
+    ? `AGENTS.md pointer="${agentsPointerAnchor}"`
+    : `missing from .agents/notes/README.md: ${missingScopeAnchors.join(' | ')}`,
 )
 report(
-  pluginNonTrivial && pluginNonTrivialAnchor,
+  pluginNonTrivial && pluginMissingScopeAnchors.length === 0,
   'plugin non-trivial definition re-states the upstream rule (re-worded)',
+  pluginMissingScopeAnchors.length === 0
+    ? undefined
+    : `missing from src/note-spec.ts: ${pluginMissingScopeAnchors.join(' | ')}`,
 )
 
 console.log(`Checking Agent Note spec against dsh repo: ${DSH_ROOT}`)
-console.log('Upstream commit: 47f943859bef60e4160492346772ded9b24f765a')
+console.log('Upstream commit: ddefc45fbc7f8e46dd73185e68295696d1297887')
 for (const n of notes) console.log(n)
 if (errors.length > 0) {
   console.log('\n⚠️  Upstream changed — sync src/note-spec.ts defaults (then bump NOTE_SPEC_VERSION).')

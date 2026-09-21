@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-09-21
+
+Verified against **DSH 0.1.6-alpha.2** (the runtime this machine now runs; the previous check was 0.1.3-alpha.1). The audit of that gap produced three behavior fixes, two new delivery/verification mechanisms, and one UX migration.
+
+### Changed
+
+- **The board is now a DSH global panel** (`sidebar.panellist` glyph + keyed `main` occupant, the seam DSH 0.1.6 introduced for exactly this kind of page — the built-in Plugins page uses it). The sidebar shows 「思磨力看板」 in the global-panels section with the open-item count badge on the glyph, and selecting it renders the three-column board in the centre column; the header's exit button is now 「返回会话」/“Back to conversation” (`ctx.layout.selectPanel(null)`) instead of an overlay close. Gone with the overlay: the fixed full-screen container, its `z-index`, and the module-level open/close observable (`src/client/board-state.ts`).
+- **The kanban-use skill is served by the shell's skill registry** (`ctx.skills.register`, host half) instead of only being copied into `~/.agents/skills`. The skill version now IS the plugin version: no stale copy can shadow it (runtime entries outrank user-level ones), and a packed skill whose frontmatter DSH cannot parse can no longer go stale on disk. The copy installer stays as the fallback for shells without the skill service.
+- **Prompt-snapshot text is literal by construction.** The runtime-context snapshot is interpolated by the shell, and an unresolvable `{{name}}` throws — so a card titled `修复 {{TOKEN}} 渲染` broke the snapshot for EVERY request while it was open. Card titles are now escaped (`literalPromptText`) and the static guidance section declares `interpolate: false`.
+
+### Fixed
+
+- **Board default workspace / sidebar badge lost the current session on DSH 0.1.6-alpha.2**: upstream removed `current` (and `currentAddress`) from the client `SessionListState`, and both consumers read it — silently degrading to the most-recent-workspace fallback. The current session is now derived the way the shell itself derives it (`retainedBy.mainView > 0`, the predicate ui-workspace's tree, ui-session's main binding and Settings use), with the pre-0.1.6 `current` field still honored so 0.1.2–0.1.5 keep working (`currentSessionId`, 5 new unit tests).
+- **Three design tokens resolved to nothing, and two were used with the wrong semantics** (all pre-existing, found by the new token gate): `--dsw-alias-bg-module` and `--dsw-alias-bg-input` have never existed in DSH — the affected surfaces (spec warning, archived notice, detail text blocks, text inputs) were transparent; error and spec-warning text used `--dsw-alias-interactive-bg-hover-danger` (a 5%-alpha hover FILL) as a TEXT color, i.e. unreadable in the light theme. Now: warn panels use the shell's warn vocabulary (`state-warn-tertiary` fill + `state-warn-label` text), errors use `state-error-primary`, inputs use `bg-layer-1`, panels use `bg-module-platform`, and the badge uses `label-primary-foreground`.
+- **`--dsw-font-mono` was never a DSH token** either: the mono surfaces now use the real stack (`--dsw-font-markdown-code-font-family` → `--ds-font-family-code`).
+
+### Added
+
+- **`scripts/check-tokens.mjs`** — design-token drift gate: every `var(--dsw-alias-*)` in `src/` must be defined by the installed DSH theme stylesheet, with a `--self-test` negative control proving the detector fails on an unknown token (a clean checkout without DSH prints an explicit SKIP line instead of a silent pass). Wired into `pnpm test`.
+- **`scripts/check-client-wiring.mjs`** — pins the panel wiring statically (one `PANEL_ID` shared by the `main` key and the panellist `id`, no return of `shell.overlay`, both slot names present in the built bundle, `.kb-panel` styled and rendered), because `tsc` cannot prove two registrations agree on one id.
+- **`scripts/verify-skill-runtime.mjs`** — loads the BUILT bundle against a real `@deepseek-ai/dsh-skill` registry: the shipped SKILL.md parses with the plugin's minimal frontmatter reader, the registration wins over a same-named user-level candidate, and the fallback declines cleanly when no skill service exists. Wired into `pnpm test`.
+
+### Changed (Agent Note spec sync)
+
+- **The Agent Note "non-trivial" rule moved upstream and is now re-stated**: DSH replaced the root `AGENTS.md` sentence ("Non-trivial changes MUST include an Agent Note…") with a scope rule in `.agents/notes/README.md` → *When to write one* (AGENTS.md keeps a one-line pointer): a note is for **lasting decision rationale that code, tests, and existing documentation do not explain**; mechanical or local edits — **including local UI presentation and interaction changes** — are exempt; updating the note that already owns the decision satisfies the rule (no duplicates); an existing note is never edited into a *different* decision (supersede + cross-link). `src/note-spec.ts` (`NOTE_SPEC_VERSION` 1 → 2), the `note_add` / system-prompt guidance, the Web "Agent Note spec" source hints, and `scripts/check-note-spec.mjs` (new anchor: the notes README plus the AGENTS.md pointer) all follow. The spec gate now also proves it can fail: deleting an anchor from the definition reddens it. `skills/kanban-use/SKILL.md` carries the same scope test (`skill-version` 2 → 3, so the copy fallback resyncs on older shells; the runtime path serves the new body with the plugin version).
+
+### Notes
+
+- Live-GUI scripts (`accept-gui.mjs`, `verify-ux.mjs`, `verify-completeness-ui.mjs`, `verify-badge-workspace.mjs`, `verify-injection-real-3080.mjs`) match the new surface (`button:has(.kb-panel-icon)`, `.kb-panel[data-testid="kanban-page"]`, `.kb-panel-badge`).
+- **Three live-GUI script defects fixed while verifying** (all in the "pass the launch URL as `DSH_GUI_URL`" path the README documents): `verify-ux.mjs` built its API base by appending `/kanban/api` to the FULL URL, so a token-carrying `DSH_GUI_URL` produced an invalid request and an empty body (`Unexpected end of JSON input`) — it now uses `new URL(BASE).origin`; `verify-badge-workspace.mjs` hardcoded the two workspaces' live open-card counts (they go stale every time a board changes) — it now reads them from each `KANBAN.json` and fails loudly when the two counts are equal (the switch would not be observable); `verify-injection-real-3080.mjs` hardcoded an expected card title AND posted its probe into the first existing session row (usually the user's own conversation) — it now derives the expected titles from the board on disk and sends the probe from a newly created session.
+- **The README figure is referenced by absolute URL** (`raw.githubusercontent.com/.../main/docs/screenshots/board-page.png`): `docs/` is not in the npm `files` list, so the relative path rendered as a broken image on the package page. (Including the 285 kB PNG in the tarball was rejected — it would quadruple the 68 kB package for one figure.)
+- `scripts/capture-board-page.mjs` refreshes the README figure from the live GUI. It captures the board PANEL element, never the window: the sidebar shows the user's session list and this README is public.
+- Upgrading needs nothing from the user beyond a browser refresh: the client half is re-served from `lib/client.js` (the profile links this checkout).
+
+### Verification (live, DSH 0.1.6-alpha.2, 2026-09-21)
+
+- `pnpm accept`: sidebar global-panel row visible → board renders in the centre column (opaque) → row marked `aria-current=page` → three columns → add / move / delete card. ✅
+- `verify-ux.mjs`: 13/13 (two-line clamp, detail dialog full content, focus trap, scroll position survives a silent refresh, poll actually advanced). ✅
+- `verify-completeness-ui.mjs`: title-only card shows the missing-field hint on the panel. ✅
+- `verify-badge-workspace.mjs`: badge follows the switched workspace (5 → 2 → 5), i.e. the `currentSessionId` fix works against the live session state. ✅
+- `verify-injection-real-3080.mjs` (real model, no tools allowed): the model reproduced **2/2** open card titles from the session-start snapshot. ✅
+
 ## [0.2.7] - 2026-09-20
 
 ### Fixed

@@ -2,7 +2,8 @@
  * Module-level open-item count for the sidebar badge, shared by the sidebar
  * entry button. Polls the host `/kanban/counts` endpoint for one workspace and
  * exposes a bare observable pair (subscribe/getSnapshot) for
- * useSyncExternalStore — same pattern as board-state.ts.
+ * useSyncExternalStore — the module-level observable pattern the plugin uses
+ * for cross-entry state (the sidebar glyph and any future consumer).
  */
 
 const listeners = new Set<() => void>()

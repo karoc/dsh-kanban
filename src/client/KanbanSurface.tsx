@@ -1,64 +1,86 @@
 /**
- * Sidebar entry button and overlay wrapper for the kanban board page.
+ * Sidebar global-panel glyph and the panel wrapper for the board page.
  *
  * Kept in a `.tsx` file so the browser bundle can parse JSX; the plugin entry
- * (src/client/index.ts) stays plain TypeScript and imports these. The sidebar
- * entry mirrors the Settings footer trigger (icon + label, left-aligned,
- * 34px compact row) so it lines up with the Settings entry below it.
+ * (src/client/index.ts) stays plain TypeScript and imports these. The board is
+ * a DSH "global panel" (DSH ≥ 0.1.6): the sidebar renders the panel row — icon,
+ * label, tooltip, selected tint — from the `sidebar.panellist` registration,
+ * and the frame renders this file's page component in the `main` column while
+ * that panel is selected. Nothing here draws its own button or overlay chrome.
  */
 
 import { useSyncExternalStore } from 'react'
 import { IconChecklistOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { BoardPage, type BoardApi, type BoardWorkspace } from './BoardPage.tsx'
-import { getBoardOpen, subscribeBoard } from './board-state.ts'
 import { getCountsSnapshot, subscribeCounts } from './board-counts.ts'
-import { recentWorkspaceId } from './workspace-pick.ts'
+import { currentSessionId, recentWorkspaceId, type SessionListLike } from './workspace-pick.ts'
 import type { BoardKey } from './locales.ts'
 
+/** Props the sidebar hands a panel glyph (`PropsRuntime<'sidebar.panellist'>`). */
+export interface PanelIconProps {
+  /** Requested square edge in pixels (16 wide, 18 in the collapsed rail). */
+  size: number
+  /** Whether this panel is the selected one. */
+  active: boolean
+}
+
 /**
- * Sidebar footer entry button: icon + label, left-aligned, styled exactly
- * like the Settings trigger (34px compact row, 12px radius, 10px left pad)
- * so it sits flush with the Settings entry below it. The rail (collapsed)
- * state shows only the icon, like the other rail controls. Shows an open-item
- * count badge when the current workspace has todo/in_progress cards.
+ * Sidebar glyph for the board panel: the checklist icon at the size the
+ * sidebar asks for, plus the open-item count badge (same count the old footer
+ * entry showed, from the /kanban/counts poll).
  */
-export function SidebarKanbanButton(props: { onClick: () => void; t: () => string; wide?: boolean }) {
-  const wide = props.wide ?? true
+export function KanbanPanelIcon(props: PanelIconProps) {
   const { open } = useSyncExternalStore(subscribeCounts, getCountsSnapshot)
   return (
-    <button
-      type="button"
-      className={wide ? 'kb-sidebar-trigger' : 'kb-sidebar-trigger kb-sidebar-trigger-rail'}
-      aria-label={props.t()}
-      onClick={props.onClick}
-    >
-      <IconChecklistOutline14 size={wide ? 16 : 18} />
-      {wide && <span className="kb-sidebar-trigger-label">{props.t()}</span>}
+    <span className="kb-panel-icon">
+      <IconChecklistOutline14 size={props.size} />
       {open > 0 && (
-        <span className={wide ? 'kb-badge' : 'kb-badge kb-badge-rail'} title={`${open} open`}>
-          {open > 99 ? '99+' : String(open)}
-        </span>
+        <span className="kb-panel-badge" title={`${open} open`}>{open > 99 ? '99+' : String(open)}</span>
       )}
-    </button>
+    </span>
   )
 }
 
-/** Injected face of the overlay entry (workspace is resolved inside the component). */
-export interface BoardOverlayInjected {
+/** Injected face of the `main` panel entry (the workspace is resolved in the component). */
+export interface BoardPanelInjected {
   api: BoardApi
+  /** Leave the panel: select the Conversation again (`ctx.layout.selectPanel(null)`). */
   onClose: () => void
   t: (key: BoardKey, params?: Record<string, unknown>) => string
   openSession?: (sessionId: string) => void
 }
 
 /**
+ * The `main` panel occupant: the frame renders it only while the board panel is
+ * selected, so it needs no visibility gate of its own.
+ */
+export function KanbanPanel(props: BoardPanelInjected & RootStandardProps) {
+  const { all, current } = resolveWorkspaces(
+    (props.useSessions?.((s: SessionListLike) => s) as SessionListLike | undefined) ?? {},
+    (props.useWorkspaces?.((s: WorkspacesSnapshot) => s) as WorkspacesSnapshot | undefined) ?? {},
+  )
+  return (
+    <BoardPage
+      api={props.api}
+      workspace={current}
+      workspaces={all}
+      onClose={props.onClose}
+      t={props.t}
+      openSession={props.openSession}
+    />
+  )
+}
+
+/**
  * Build the full workspace list plus the default (current-session) workspace
  * from the framework seats. Default: the current session's cwd, then the most
  * recently active workspace, then the first workspace. The list drives the
- * board page's workspace switcher.
+ * board page's workspace switcher. The current Session is resolved through
+ * {@link currentSessionId}, which covers both DSH selection eras (list-snapshot
+ * `current` up to 0.1.5, main-view retention from 0.1.6-alpha.2 on).
  */
 function resolveWorkspaces(
-  sessionList: { byId?: Record<string, { cwd?: string; updatedAt?: number }>; current?: string },
+  sessionList: SessionListLike,
   workspaceList: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[]; createdAt?: string }> },
 ): { all: BoardWorkspace[]; current: BoardWorkspace | undefined } {
   const items = workspaceList.items ?? []
@@ -67,7 +89,7 @@ function resolveWorkspaces(
     cwd: item.path,
     title: item.title ?? item.path,
   }))
-  const current = sessionList.current
+  const current = currentSessionId(sessionList)
   if (current !== undefined) {
     const cwd = sessionList.byId?.[current]?.cwd
     if (cwd !== undefined && cwd !== '') {
@@ -85,29 +107,12 @@ function resolveWorkspaces(
 /**
  * The framework standard props available to a root-scope slot entry: the
  * global useSessions / useWorkspaces selector hooks. Structural, so the
- * external bundle compiles without pulling the runtime's merged types.
+ * external bundle compiles without pulling the runtime's merged types. The
+ * session snapshot type carries both selection eras (see workspace-pick.ts).
  */
-interface RootStandardProps {
-  useSessions?: (selector: (snapshot: { byId?: Record<string, { cwd?: string; updatedAt?: number }>; current?: string }) => unknown) => unknown
-  useWorkspaces?: (selector: (snapshot: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[]; createdAt?: string }> }) => unknown) => unknown
-}
+type WorkspacesSnapshot = { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[]; createdAt?: string }> }
 
-/** Overlay wrapper: renders the board page only while open. */
-export function KanbanOverlay(props: BoardOverlayInjected & RootStandardProps) {
-  const open = useSyncExternalStore(subscribeBoard, getBoardOpen)
-  const { all, current } = resolveWorkspaces(
-    (props.useSessions?.((s: { byId?: Record<string, { cwd?: string; updatedAt?: number }>; current?: string }) => s) as { byId?: Record<string, { cwd?: string; updatedAt?: number }>; current?: string }) ?? {},
-    (props.useWorkspaces?.((s: { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[]; createdAt?: string }> }) => s) as { items?: ReadonlyArray<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[]; createdAt?: string }> }) ?? {},
-  )
-  if (!open) return null
-  return (
-    <BoardPage
-      api={props.api}
-      workspace={current}
-      workspaces={all}
-      onClose={props.onClose}
-      t={props.t}
-      openSession={props.openSession}
-    />
-  )
+interface RootStandardProps {
+  useSessions?: (selector: (snapshot: SessionListLike) => unknown) => unknown
+  useWorkspaces?: (selector: (snapshot: WorkspacesSnapshot) => unknown) => unknown
 }

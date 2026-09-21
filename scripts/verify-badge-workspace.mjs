@@ -10,22 +10,37 @@
 // the workspaces + sessions feeds (client-side `recentWorkspaceId`, mirroring
 // ui-workspace's `recentWorkspace`).
 //
-// Test data on this machine: /srv/jiuta has 4 open cards (badge "4") while
-// /home/karoc and /home/karoc/dsh-desktop have 0 (no badge).
+// Flow: boot -> record badge -> switch to workspace A -> open one of its
+// sessions -> assert the glyph badge equals A's open-card count -> switch to
+// workspace B -> assert B's count -> switch back to A -> assert A's count
+// again (repeatability).
 //
-// Flow: boot -> record badge -> click "dsh-desktop" workspace group -> open a
-// dsh-desktop session -> assert badge shows 2 -> switch to "dsh-kanban" group
-// -> open a session -> assert badge shows 1 -> switch back to dsh-desktop ->
-// assert badge shows 2 again.
-//
-// [2026-09-08] Test data refreshed for the live machine: /home/karoc/dsh-desktop
-// has 2 open cards (badge "2") while /home/karoc/dsh-kanban has 1 (badge "1").
-// The old fixtures (jiuta=4 / karoc=0) went stale as boards changed; the
-// current pair keeps clear discriminability in both directions.
+// The expected counts are READ FROM each workspace's KANBAN.json at run time,
+// not hardcoded: earlier revisions pinned the live numbers and went stale every
+// time a board changed (jiuta=4/karoc=0 → desktop=2/kanban=1 → …), which turns
+// a product check into a fixture-maintenance chore. The two workspaces must
+// still have DIFFERENT open counts for the switch to be observable — the script
+// fails loudly when they do not.
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { chromium } from 'playwright'
 import { gotoApp } from './gui-auth.mjs'
 
 const BASE = process.env.DSH_GUI_URL ?? 'http://127.0.0.1:3080'
+
+/** The two workspaces this check switches between (distinct open counts required). */
+const WORKSPACE_A = { title: 'dsh-desktop', dir: '/home/karoc/dsh-desktop' }
+const WORKSPACE_B = { title: 'dsh-kanban', dir: '/home/karoc/dsh-kanban' }
+
+/** Open-card count of a workspace's board, or undefined when it has no board. */
+async function openCardCount(dir) {
+  try {
+    const board = JSON.parse(await readFile(join(dir, 'KANBAN.json'), 'utf8'))
+    return board.cards.filter(card => card.status === 'todo' || card.status === 'in_progress').length
+  } catch {
+    return undefined
+  }
+}
 const browser = await chromium.launch()
 const results = []
 function record(name, ok, detail = '') {
@@ -34,7 +49,7 @@ function record(name, ok, detail = '') {
 }
 
 async function badgeState(page) {
-  const el = page.locator('button.kb-sidebar-trigger .kb-badge')
+  const el = page.locator('button:has(.kb-panel-icon) .kb-panel-badge')
   const n = await el.count()
   if (n === 0) return { text: null, visible: false }
   const text = (await el.first().innerText()).trim()
@@ -99,29 +114,39 @@ try {
   await gotoApp(page, BASE)
   await page.waitForTimeout(5000)
 
-  const trigger = page.locator('button.kb-sidebar-trigger').first()
+  const trigger = page.locator('button:has(.kb-panel-icon)').first()
   await trigger.waitFor({ state: 'visible', timeout: 15000 })
   console.log('boot badge:', JSON.stringify(await badgeState(page)))
 
-  // --- Switch to dsh-desktop (2 open) ---
-  await clickWorkspace(page, 'dsh-desktop')
-  await openFirstSessionInGroup(page, 'dsh-desktop')
-  const desktopBadge = await badgeState(page)
-  record('after switching to dsh-desktop, badge shows 2', desktopBadge.visible && desktopBadge.text === '2', JSON.stringify(desktopBadge))
-  await page.screenshot({ path: '/tmp/kb-badge-dsh-desktop.png' })
+  // Expected badges come from the boards on disk, so the check never goes stale.
+  const expectedA = await openCardCount(WORKSPACE_A.dir)
+  const expectedB = await openCardCount(WORKSPACE_B.dir)
+  console.log(`expected badges: ${WORKSPACE_A.title}=${String(expectedA)} ${WORKSPACE_B.title}=${String(expectedB)}`)
+  if (expectedA === undefined || expectedB === undefined || expectedA === expectedB) {
+    record('the two workspaces have distinct open-card counts', false, `${WORKSPACE_A.title}=${String(expectedA)} ${WORKSPACE_B.title}=${String(expectedB)} — the switch would not be observable`)
+  } else {
+    record('the two workspaces have distinct open-card counts', true, `${WORKSPACE_A.title}=${expectedA} ${WORKSPACE_B.title}=${expectedB}`)
 
-  // --- Switch to dsh-kanban (1 open) ---
-  await clickWorkspace(page, 'dsh-kanban')
-  await openFirstSessionInGroup(page, 'dsh-kanban')
-  const kanbanBadge = await badgeState(page)
-  record('after switching to dsh-kanban, badge shows 1', kanbanBadge.visible && kanbanBadge.text === '1', JSON.stringify(kanbanBadge))
-  await page.screenshot({ path: '/tmp/kb-badge-dsh-kanban.png' })
+    // --- Switch to workspace A ---
+    await clickWorkspace(page, WORKSPACE_A.title)
+    await openFirstSessionInGroup(page, WORKSPACE_A.title)
+    const badgeA = await badgeState(page)
+    record(`after switching to ${WORKSPACE_A.title}, badge shows ${expectedA}`, badgeA.visible && badgeA.text === String(expectedA), JSON.stringify(badgeA))
+    await page.screenshot({ path: `/tmp/kb-badge-${WORKSPACE_A.title}.png` })
 
-  // --- Switch back to dsh-desktop again (repeatability) ---
-  await clickWorkspace(page, 'dsh-desktop')
-  await openFirstSessionInGroup(page, 'dsh-desktop')
-  const desktopAgain = await badgeState(page)
-  record('switch back to dsh-desktop shows 2 again', desktopAgain.visible && desktopAgain.text === '2', JSON.stringify(desktopAgain))
+    // --- Switch to workspace B ---
+    await clickWorkspace(page, WORKSPACE_B.title)
+    await openFirstSessionInGroup(page, WORKSPACE_B.title)
+    const badgeB = await badgeState(page)
+    record(`after switching to ${WORKSPACE_B.title}, badge shows ${expectedB}`, badgeB.visible && badgeB.text === String(expectedB), JSON.stringify(badgeB))
+    await page.screenshot({ path: `/tmp/kb-badge-${WORKSPACE_B.title}.png` })
+
+    // --- Switch back to A again (repeatability) ---
+    await clickWorkspace(page, WORKSPACE_A.title)
+    await openFirstSessionInGroup(page, WORKSPACE_A.title)
+    const badgeAAgain = await badgeState(page)
+    record(`switch back to ${WORKSPACE_A.title} shows ${expectedA} again`, badgeAAgain.visible && badgeAAgain.text === String(expectedA), JSON.stringify(badgeAAgain))
+  }
 } catch (err) {
   console.error('VERIFY FAILED:', err.message)
   results.push({ name: 'script ran to completion', ok: false, detail: err.message })
