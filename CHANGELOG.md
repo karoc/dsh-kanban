@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-09-23
+
+Verified against **DSH 0.1.7-alpha.1** (the runtime this machine now runs; the previous check was 0.1.6-alpha.2). One visual-language adaptation; no behavior change.
+
+### Fixed
+
+- **DSH 0.1.7 renamed every icon this plugin used (visual-language unification, upstream commit 4937343a5e).** The size-suffixed names — `IconChevronDownOutline14`, `IconChevronLeftOutline14`, `IconQueueOutline14`, `IconChecklistOutline14`, `IconCloseOutline16`, `IconGoalOutline16`, `IconListPenOutline16`, `IconPlusOutline16`, `IconRefreshOutline16`, `IconThinkOutline16`, `IconTrashOutline16`, `IconWarningOutline16`, `IconInspectOutline12` (13 names across `BoardPage.tsx` + `KanbanSurface.tsx`) — no longer exist in `dsh-client-ui-primitives`; each resolved to `undefined`, so the board entry crashed on render (`React error #130`, `slot entry crashed in 'sidebar.panellist'`) and the panel never appeared. All imports now use the `*Regular` (1 px) stroke variants — the weight the built-in settings pages use — and every rendered size is unchanged (the new artworks keep the old defaults: chevrons/queue/checklist 14 px, close/goal/list-pen/plus/refresh/think/trash/warning 16 px, inspect 12 px).
+
+### Notes
+
+- Re-checked the two upstream facts `src/client/workspace-pick.ts` encodes against 0.1.7: `retainedBy.mainView` is still the shell's current-session predicate and `recentWorkspaceId` is still absent from `WorkspaceSnapshot` — no change needed. `pnpm check:tokens` against the 0.1.7 theme stylesheet stays green.
+- **Support floor**: the client half now requires **DSH ≥ 0.1.7** (the `*Regular` icon variants exist from 0.1.7 on); 0.2.8 remains the release for 0.1.2–0.1.6, whose dual-era session reads ship unchanged in this version and still degrade gracefully if an older shell runs the host half.
+- Verified live on DSH 0.1.7-alpha.1 (2026-09-23, isolated DSH_HOME + Playwright): `accept-gui.mjs` ✅ ACCEPTED (9/9 — sidebar entry, opaque panel, three columns, add / move / delete card), browser console clean (the previous `slot entry crashed in 'sidebar.panellist'` #130 is gone).
+- **README figure**: the board figure predates the icon refresh (the three-column content is the same; the icons are now 1 px stroke). Refresh in a later pass against a live dsh web: `DSH_GUI_URL='http://127.0.0.1:3080/?token=…' node scripts/capture-board-page.mjs`.
+
 ## [0.2.8] - 2026-09-21
 
 Verified against **DSH 0.1.6-alpha.2** (the runtime this machine now runs; the previous check was 0.1.3-alpha.1). The audit of that gap produced three behavior fixes, two new delivery/verification mechanisms, and one UX migration.

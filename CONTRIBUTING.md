@@ -70,6 +70,11 @@ restart, open the sidebar 「看板」).
   facts (the `recentWorkspaceId` removal in 0.1.3-alpha.1 and the `current`
   removal in 0.1.6-alpha.2). Unknown CSS custom properties and removed snapshot
   fields both fail SILENTLY — nothing throws, the UI just goes flat.
+  Icon exports fail the other way: 0.1.7 dropped the size-suffixed names
+  (`IconX14` / `IconX16` became the `*Regular` / `*Medium` stroke variants of
+  `IconX`), and an import that no longer resolves is an undefined component
+  that crashes its slot entry on first render — `tsc --noEmit` in `pnpm test`
+  catches it before that.
 
 ## Publishing to npm (human-operated, 2FA)
 

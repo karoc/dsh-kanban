@@ -13,18 +13,18 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   Button,
-  IconChevronDownOutline14,
-  IconChevronLeftOutline14,
-  IconCloseOutline16,
-  IconGoalOutline16,
-  IconInspectOutline12,
-  IconListPenOutline16,
-  IconPlusOutline16,
-  IconQueueOutline14,
-  IconRefreshOutline16,
-  IconThinkOutline16,
-  IconTrashOutline16,
-  IconWarningOutline16,
+  IconChevronDownOutlineRegular,
+  IconChevronLeftOutlineRegular,
+  IconCloseOutlineRegular,
+  IconGoalOutlineRegular,
+  IconInspectOutlineRegular,
+  IconListPenOutlineRegular,
+  IconPlusOutlineRegular,
+  IconQueueOutlineRegular,
+  IconRefreshOutlineRegular,
+  IconThinkOutlineRegular,
+  IconTrashOutlineRegular,
+  IconWarningOutlineRegular,
   Input,
   Menu,
   Modal,
@@ -379,7 +379,7 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
                   <Button
                     variant="primary"
                     size="md"
-                    icon={<IconPlusOutline16 />}
+                    icon={<IconPlusOutlineRegular />}
                     disabled={draftTitle.trim() === ''}
                     onClick={addCard}
                   >
@@ -594,7 +594,7 @@ function WorkspacePicker(props: {
           <span className="kb-workspace-label">{t('workspaceLabel')}:</span>
           <span className="kb-workspace-trigger">
             {selected?.title ?? t('workspaceChoose')}
-            <IconChevronDownOutline14 />
+            <IconChevronDownOutlineRegular />
           </span>
         </button>
       )}
@@ -652,7 +652,7 @@ const Card = memo(function Card(props: {
       >
         <h4 className="kb-card-title">
           <span className="kb-card-title-text">{card.title}</span>
-          <IconInspectOutline12 className="kb-card-detail-icon" />
+          <IconInspectOutlineRegular className="kb-card-detail-icon" />
         </h4>
         {card.description !== undefined && <p className="kb-card-desc">{card.description}</p>}
         {fields.some(([, value]) => value !== undefined) && (
@@ -666,7 +666,7 @@ const Card = memo(function Card(props: {
         )}
         {missing.length > 0 && (
           <p className="kb-card-missing">
-            <IconWarningOutline16 />
+            <IconWarningOutlineRegular />
             {t('missingFields', {
               fields: missing.map(field => qualityFieldLabel(field, t)).join('、'),
             })}
@@ -686,7 +686,7 @@ const Card = memo(function Card(props: {
               className="kb-source-btn"
               onClick={() => onOpenSession(card.sourceSessionId as string)}
             >
-              <IconQueueOutline14 />
+              <IconQueueOutlineRegular />
               <span>{t('sourceSession')}</span>
             </button>
           )}
@@ -716,7 +716,7 @@ const Card = memo(function Card(props: {
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconTrashOutline16 />}
+            icon={<IconTrashOutlineRegular />}
             aria-label={t('remove')}
             onClick={() => setConfirmDelete(true)}
             className="kb-trash-btn"
@@ -737,7 +737,7 @@ const Card = memo(function Card(props: {
             <Button
               variant="primary"
               size="sm"
-              icon={<IconTrashOutline16 />}
+              icon={<IconTrashOutlineRegular />}
               onClick={() => {
                 onRemove(card.id)
                 setConfirmDelete(false)
@@ -775,9 +775,9 @@ function CardDetail(props: {
 }) {
   const { card, t, open, onClose, onOpenSession } = props
   const sections: Array<{ label: string; value?: string; icon: ReactNode }> = [
-    { label: t('fieldSummary'), value: card.summary, icon: <IconGoalOutline16 /> },
-    { label: t('fieldRationale'), value: card.rationale, icon: <IconThinkOutline16 /> },
-    { label: t('fieldRejected'), value: card.rejected, icon: <IconWarningOutline16 /> },
+    { label: t('fieldSummary'), value: card.summary, icon: <IconGoalOutlineRegular /> },
+    { label: t('fieldRationale'), value: card.rationale, icon: <IconThinkOutlineRegular /> },
+    { label: t('fieldRejected'), value: card.rejected, icon: <IconWarningOutlineRegular /> },
   ]
   const present = sections.filter(section => section.value !== undefined && section.value !== '')
   const hasDescription = card.description !== undefined && card.description !== ''
@@ -805,13 +805,13 @@ function CardDetail(props: {
             </div>
           </div>
           <button type="button" className="kb-detail-close" aria-label={t('close')} onClick={onClose}>
-            <IconCloseOutline16 size={14} />
+            <IconCloseOutlineRegular size={14} />
           </button>
         </div>
         <div className="kb-detail-scroll">
           {hasDescription && (
             <section className="kb-detail-block">
-              <div className="kb-detail-block-label"><IconListPenOutline16 />{t('fieldDescription')}</div>
+              <div className="kb-detail-block-label"><IconListPenOutlineRegular />{t('fieldDescription')}</div>
               <p className="kb-detail-block-body">{card.description}</p>
             </section>
           )}
@@ -831,7 +831,7 @@ function CardDetail(props: {
                 className="kb-source-btn"
                 onClick={() => onOpenSession(card.sourceSessionId as string)}
               >
-                <IconQueueOutline14 />
+                <IconQueueOutlineRegular />
                 <span>{t('sourceSession')}</span>
               </button>
             )}
@@ -867,13 +867,13 @@ function BoardHeader(props: {
       </div>
       <div className="kb-header-spacer" />
       {props.onRefresh !== undefined && (
-        <Button variant="ghost" size="md" icon={<IconRefreshOutline16 />} onClick={props.onRefresh}>
+        <Button variant="ghost" size="md" icon={<IconRefreshOutlineRegular />} onClick={props.onRefresh}>
           {props.t('refresh')}
         </Button>
       )}
       {/* Leaves the panel: selecting the Conversation restores the centre
           column (the sidebar's session rows do the same). */}
-      <Button variant="ghost" size="md" icon={<IconChevronLeftOutline14 />} onClick={props.onClose}>
+      <Button variant="ghost" size="md" icon={<IconChevronLeftOutlineRegular />} onClick={props.onClose}>
         {props.t('backToChat')}
       </Button>
     </header>

@@ -10,7 +10,7 @@
  */
 
 import { useSyncExternalStore } from 'react'
-import { IconChecklistOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChecklistOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { BoardPage, type BoardApi, type BoardWorkspace } from './BoardPage.tsx'
 import { getCountsSnapshot, subscribeCounts } from './board-counts.ts'
 import { currentSessionId, recentWorkspaceId, type SessionListLike } from './workspace-pick.ts'
@@ -33,7 +33,7 @@ export function KanbanPanelIcon(props: PanelIconProps) {
   const { open } = useSyncExternalStore(subscribeCounts, getCountsSnapshot)
   return (
     <span className="kb-panel-icon">
-      <IconChecklistOutline14 size={props.size} />
+      <IconChecklistOutlineRegular size={props.size} />
       {open > 0 && (
         <span className="kb-panel-badge" title={`${open} open`}>{open > 99 ? '99+' : String(open)}</span>
       )}
