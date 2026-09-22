@@ -38,7 +38,8 @@ restart, open the sidebar 「看板」).
 ## Release contents (per version)
 
 - Non-empty `CHANGELOG.md` entry matching `package.json` version.
-- Both `README.md` and `README.zh.md` updated for user-visible changes.
+- Both `README.md` and `README.zh.md` updated for user-visible changes — including compatibility statements (supported DSH floor, the release to use on older shells), re-checked sentence-by-sentence against the code before tagging (the gate checks structure only).
+- **Before tagging — the semantic sweep.** Re-read every sentence the change could have invalidated (README en/zh, version/compat statements, CHANGELOG wording) against the code, then run the standing self-check:「我这次改的东西，有没有哪句话、哪个字段的说法现在已经不对了？」 Discipline source: `~/.agents/skills/dsh-plugin-development/SKILL.md` (§6).
 - `lib/` built and fresh (`pnpm bundle`).
 - **README figure current**: the board figure must show the current UI
   (`node scripts/capture-board-page.mjs` with a live `dsh web` + `DSH_GUI_URL`).
