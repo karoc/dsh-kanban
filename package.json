@@ -46,7 +46,7 @@
     "bundle": "tsdown --config ./tsdown.config.ts",
     "prepare": "tsdown --config ./tsdown.config.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsc --noEmit && node --test scripts/board-core.spec.mjs scripts/workspace-pick.spec.mjs && node scripts/check-card-discipline.mjs && node scripts/check-tokens.mjs --self-test && node scripts/check-client-wiring.mjs && node scripts/verify-tools.mjs && node scripts/verify-spec.mjs && node scripts/verify-context.mjs && node scripts/verify-skill-sync.mjs && node scripts/verify-skill-runtime.mjs && node scripts/check-guarantees.mjs",
+    "test": "tsc --noEmit && node --test scripts/board-core.spec.mjs scripts/workspace-pick.spec.mjs && node scripts/check-card-discipline.mjs && node scripts/check-tokens.mjs --self-test && node scripts/check-client-wiring.mjs && node scripts/verify-tools.mjs && node scripts/verify-spec.mjs && node scripts/verify-context.mjs && node scripts/verify-skill-sync.mjs && node scripts/verify-skill-runtime.mjs && node scripts/check-guarantees.mjs && node scripts/test-negative-controls.mjs",
     "check:spec": "node scripts/check-note-spec.mjs",
     "check:cards": "node scripts/check-card-discipline.mjs",
     "check:tokens": "node scripts/check-tokens.mjs --self-test",
@@ -60,7 +60,8 @@
     "prepack": "node scripts/release-check.mjs",
     "prepublishOnly": "node scripts/release-check.mjs && tsdown --config ./tsdown.config.ts",
     "postpublish": "node scripts/post-publish-check.mjs",
-    "verify:guarantees": "node scripts/check-guarantees.mjs"
+    "verify:guarantees": "node scripts/check-guarantees.mjs",
+    "test:controls": "node scripts/test-negative-controls.mjs"
   },
   "engines": {
     "node": ">=18"
