@@ -5,7 +5,28 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.10] - 2026-09-25
+
+### Changed
+
+- **The dsh floor is now declared as a peer dependency, not only documented.**
+  `package.json` declares an optional peer on
+  `@deepseek-ai/dsh-client-ui-slots: ">=0.1.7-rc.1"`. DSH ≥ 0.1.7 evaluates every
+  `@deepseek-ai/dsh*` peer against its own runtime version, so an older dsh now
+  refuses to load the board and prints the exact `dsh plugin allow-version`
+  remedy instead of crashing later at render time. It is marked
+  `peerDependenciesMeta.optional` because the host supplies that package at
+  runtime — npm therefore installs nothing extra. The prerelease rule the range
+  encodes: `>=0.1.7` (or `^0.1.7`) does **not** match a `0.1.7-rc.N` runtime,
+  hence the explicit `-rc.1` floor.
+
+### Tests
+
+- **Type-checked against DSH 0.1.7-rc.2** (2026-09-25): `tsc --noEmit` is green
+  for both halves with the rc.2 type surface, and a seam-by-seam diff of
+  rc.1→rc.2 shows every slot, client service and imported symbol the board uses
+  is unchanged or purely additive. No runtime GUI pass was done in that sweep —
+  the board was not restarted onto rc.2.
 
 ## [0.2.9] - 2026-09-23
 

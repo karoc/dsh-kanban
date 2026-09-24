@@ -357,7 +357,11 @@ Since DSH 0.1.7-alpha.1 icons carry their stroke weight in the name
 (`*Regular` = 1 px, `*Medium` = 1.3 px) and the size-suffixed names are gone;
 the board imports the `*Regular` variants, with every rendered size unchanged
 (the artwork defaults still carry the old sizes). **The client half therefore
-requires DSH ≥ 0.1.7 since 0.2.9** — 0.2.8 is the release for 0.1.2–0.1.6.
+requires DSH ≥ 0.1.7 since 0.2.9** — 0.2.8 is the release for 0.1.2–0.1.6. The
+floor is declared as an optional `@deepseek-ai/dsh-client-ui-slots` peer
+dependency, so a DSH ≥ 0.1.7 runtime refuses to load the plugin on an older dsh
+and prints the exact `dsh plugin allow-version` remedy instead of failing later
+at render time.
 
 `scripts/verify-model-board.mjs` additionally verifies a **real model call**: it sends
 the GUI agent an instruction to use `board_add`/`board_list`, then confirms the card

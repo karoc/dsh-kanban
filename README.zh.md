@@ -284,7 +284,10 @@ div；真机脚本的定位器同时匹配两者（`textarea, [contenteditable="
 自 DSH 0.1.7-alpha.1 起，图标名从尺寸后缀改为笔画权重（`*Regular` = 1 px、
 `*Medium` = 1.3 px），旧尺寸后缀名已移除；看板改用 `*Regular` 变体，渲染尺寸
 不变（尺寸仍由各自的 artwork 默认值承载）。**客户端半区自此要求 DSH ≥ 0.1.7**
-（0.2.9 起）——0.1.2–0.1.6 用 0.2.8。
+（0.2.9 起）——0.1.2–0.1.6 用 0.2.8。该下限已声明为对
+`@deepseek-ai/dsh-client-ui-slots` 的可选 peer 依赖：DSH ≥ 0.1.7 的运行时在旧
+dsh 上会拒绝加载本插件并打印 `dsh plugin allow-version` 的具体解法，而不是等到
+渲染时才崩。
 
 `scripts/verify-model-board.mjs` 额外验证**真实模型调用**：向 GUI 会话发一条让模型用
 `board_add`/`board_list` 的指令，确认卡片写入会话 cwd 的 `KANBAN.json`、并能在看板页读到
