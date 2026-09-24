@@ -119,7 +119,7 @@ function createBoardApi(): BoardApi {
 }
 
 /**
- * Browser plugin body: registers the sidebar entry and the full-screen page.
+ * Browser plugin body: registers the sidebar entry and the global-panel page.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {

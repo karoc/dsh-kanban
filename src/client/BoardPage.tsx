@@ -1,5 +1,6 @@
 /**
- * The full-screen kanban board page (external plugin).
+ * The kanban board page: the keyed occupant of the global "main" panel
+ * (sidebar.panellist entry + main slot) — not an overlay of its own.
  *
  * Reads the workspace's KANBAN.json through the host webServer route
  * (GET/POST /kanban/api) and renders three columns (todo / in_progress / done)
