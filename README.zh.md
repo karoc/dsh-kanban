@@ -51,7 +51,7 @@
 3. **收尾纪律**：指引明确要求——**每轮工作结束**，模型必须把完成项移到 done、把新后续加为 todo、更新 summaries，**不留 stale 的 in_progress**，让看板成为诚实的跨会话交接。
 4. **用户侧可见性**：侧边栏全局面板区的「思磨力看板」入口图标带**未完成计数角标**（`/kanban/counts` 端点，工作区最近活跃优先，订阅工作区变更即时刷新）；看板页显示期间**每 15s 自动刷新**，模型/其他会话写入后自动更新。
 
-**数据安全承诺**：插件**只写不删**看板/笔记文件；没有启动清理、定时清理、安装清理。卡片只能被显式 `board_remove` / Web 删除按钮移除（删除需二次确认）；超量 done 卡片是**归档**（移到 `.agents/notes/archive.json`），永不删除。所有数据在你**工作区目录**内（可进 git、可手改）。
+**数据安全承诺**：插件**只写不删**看板/笔记文件（唯一例外：没有技能服务的旧 shell 上会复制一份 `~/.agents/skills/kanban-use/SKILL.md`，见下）；没有启动清理、定时清理、安装清理。卡片只能被显式 `board_remove` / Web 删除按钮移除（删除需二次确认）；超过 100 张的 done 卡片按**最旧优先归档**（移到 `.agents/notes/archive.json`），永不删除。所有看板数据都在你**工作区目录**内（可进 git、可手改）。
 
 ### 模型工具
 
@@ -190,7 +190,7 @@ dsh plugin --profile web remove dsh-kanban   # 同时移除依赖和 bundle 层�
 **kanban-use 技能**（`skills/kanban-use/SKILL.md`）是这套纪律的深度手册——字段语义、好/坏卡片对比、创建 → 推进 → 收尾全流程、关闭检查清单与模板。系统提示引导会把模型指向它。**技能的投递分两条路**：
 
 - **首选（DSH ≥ 0.1.6，`ctx.skills` 存在）**：host 半区把包内 `skills/kanban-use/SKILL.md` 直接注册进 shell 的技能注册表（`ctx.skills.register`，`source: 'runtime'`）。技能版本 = 插件版本，不存在"旧副本"，也不会因为磁盘上某份 frontmatter 坏掉而静默消失；按 DSH 的优先级（项目 > runtime > 用户），`~/.agents/skills` 里的旧副本**不会**盖住它，而工作区里的 `.agents/skills`（或 `.dsh/skills`）副本仍然优先——这就是自定义覆盖的官方方式。
-- **兜底（旧 shell，或 profile 没有技能服务）**：退回复制安装——技能随 npm 包分发（tarball 内含 `skills/kanban-use/SKILL.md` 与 `scripts/install-skill.mjs`），启动时检查 `~/.agents/skills/kanban-use/SKILL.md`，由 frontmatter 里的 `skill-version` 指纹驱动：缺失 → 复制；一致 → 不动；**同版本但内容不同 → 保留你的本地版本**并提示；**旧/异版本 → 覆盖同步**。
+- **兜底（旧 shell，或 profile 没有技能服务）**：退回复制安装——技能随 npm 包分发（tarball 内含 `skills/kanban-use/SKILL.md` 与 `scripts/install-skill.mjs`），启动时检查 `~/.agents/skills/kanban-use/SKILL.md`，由 frontmatter 里的 `skill-version` 指纹驱动：缺失 → 复制；一致 → 不动；**同版本或更新版本但内容不同 → 保留你的本地版本**并提示；**更旧版本（或无指纹的旧副本）→ 覆盖同步**。
 
 两条路都不需要用户做额外操作：「`dsh plugin add/update dsh-kanban` + 必需的重启」就够了。手动命令仍保留（仓库开发 / 强制同步）：
 
@@ -232,7 +232,7 @@ docs/screenshots/board-page.png  # Web 看板页截图（README 配图）
 
 ## 为什么做成外部插件
 
-dsh 官方更新的覆盖范围是仓库内的内置包；**外部 bundle 由 `dsh plugin` 装进用户 profile，官方升级不会触碰它**（与 `dsh-model-reasoning` 同一模式）。插件只用 dsh 对外稳定的能力面：模型工具注册（`ctx.tools`）、webServer 路由注册、技能注册表（`ctx.skills`）、以及 Web 全局面板槽位（`sidebar.panellist` + `main`）——官方更新无法覆盖它。
+dsh 官方更新的覆盖范围是仓库内的内置包；**外部 bundle 由 `dsh plugin` 装进用户 profile，官方升级不会触碰它**（与 `dsh-model-reasoning` 同一模式）。插件只用 dsh 对外稳定的能力面：模型工具注册（`ctx.tools`）、webServer 路由注册、系统提示位（`ctx.systemPrompt.section` / `.context`）、命令注册表（`ctx.commands`）、技能注册表（`ctx.skills`）、以及 Web 全局面板槽位（`sidebar.panellist` + `main`）——官方更新无法覆盖它。
 
 ## 已知限制（第一版）
 
@@ -255,7 +255,7 @@ pnpm bundle    # 产出 lib/index.js + lib/client.js
 ## 验证
 
 ```sh
-pnpm test       # tsc --noEmit 类型检查 + 14 个 KANBAN.json 领域单测
+pnpm test       # tsc --noEmit 类型检查 + 20 个 KANBAN.json 领域单测
                 #   + 13 个 workspace-pick / 当前会话推导单测
                 #   + 令牌漂移门禁（自带负向对照）+ 面板连线门禁
                 #   + Host 工具冒烟 + 技能 runtime 注册（对真实 registry）
@@ -284,10 +284,15 @@ div；真机脚本的定位器同时匹配两者（`textarea, [contenteditable="
 自 DSH 0.1.7-alpha.1 起，图标名从尺寸后缀改为笔画权重（`*Regular` = 1 px、
 `*Medium` = 1.3 px），旧尺寸后缀名已移除；看板改用 `*Regular` 变体，渲染尺寸
 不变（尺寸仍由各自的 artwork 默认值承载）。**客户端半区自此要求 DSH ≥ 0.1.7**
-（0.2.9 起）——0.1.2–0.1.6 用 0.2.8。该下限已声明为对
-`@deepseek-ai/dsh-client-ui-slots` 的可选 peer 依赖：DSH ≥ 0.1.7 的运行时在旧
-dsh 上会拒绝加载本插件并打印 `dsh plugin allow-version` 的具体解法，而不是等到
-渲染时才崩。
+（0.2.9 起）——0.1.2–0.1.6 用 0.2.8。该下限自 0.2.10 起同时声明为对
+`@deepseek-ai/dsh-client-ui-slots` 的可选 peer 依赖，区间 `>=0.1.7-rc.1`
+（预发布下限不可省：`>=0.1.7` 匹配不到 `0.1.7-rc.N` 运行时）。peer 闸门本身随
+**DSH 0.1.7-rc.1** 出现：从该版本起 loader 会拿运行时版本校验每个
+`@deepseek-ai/dsh*` peer，不兼容就跳过该 bundle 并打印
+`dsh plugin allow-version` 的具体解法（`dsh plugin add` 直接拒绝安装）——今后插件
+抬高的下限会被前置拦住，而不是等到渲染时才崩。早于该闸门的运行时（直到
+0.1.7-alpha.2 为止，含全部 0.1.2–0.1.6）根本不校验 peer：本插件仍会加载，崩的是
+客户端半区——这正是那些版本继续用 0.2.8 的原因。
 
 `scripts/verify-model-board.mjs` 额外验证**真实模型调用**：向 GUI 会话发一条让模型用
 `board_add`/`board_list` 的指令，确认卡片写入会话 cwd 的 `KANBAN.json`、并能在看板页读到

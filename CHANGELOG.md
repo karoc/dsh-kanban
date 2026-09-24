@@ -11,22 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The dsh floor is now declared as a peer dependency, not only documented.**
   `package.json` declares an optional peer on
-  `@deepseek-ai/dsh-client-ui-slots: ">=0.1.7-rc.1"`. DSH ≥ 0.1.7 evaluates every
-  `@deepseek-ai/dsh*` peer against its own runtime version, so an older dsh now
-  refuses to load the board and prints the exact `dsh plugin allow-version`
-  remedy instead of crashing later at render time. It is marked
+  `@deepseek-ai/dsh-client-ui-slots: ">=0.1.7-rc.1"`. The gate that reads it ships from **DSH 0.1.7-rc.1** on — it compares every
+  `@deepseek-ai/dsh*` peer against the running runtime and refuses a plugin the
+  runtime fails, printing the `dsh plugin allow-version` remedy. Runtimes older
+  than that gate (0.1.7-alpha.1/2 and all of 0.1.2–0.1.6) evaluate **no** peers:
+  they still load the board and fail in the client half, so **0.2.8 remains the
+  release for 0.1.2–0.1.6**. Verified live: the board (host half) is loaded on
+  dsh 0.1.7-rc.2, which evaluated this range at startup. It is marked
   `peerDependenciesMeta.optional` because the host supplies that package at
-  runtime — npm therefore installs nothing extra. The prerelease rule the range
-  encodes: `>=0.1.7` (or `^0.1.7`) does **not** match a `0.1.7-rc.N` runtime,
-  hence the explicit `-rc.1` floor.
+  runtime — npm therefore installs nothing extra. The prerelease rule the range encodes (measured with the semver DSH actually
+  resolves: 7.8.5, the copy `@deepseek-ai/dsh-app-boot` links to): `>=0.1.7` and
+  `^0.1.7` do **not** match a `0.1.7-rc.N` runtime, hence the explicit `-rc.1`
+  floor. semver 7.7.4 answers `true` for the caret form — spelling the
+  prerelease out is what keeps the range unambiguous.
 
 ### Tests
 
 - **Type-checked against DSH 0.1.7-rc.2** (2026-09-25): `tsc --noEmit` is green
   for both halves with the rc.2 type surface, and a seam-by-seam diff of
   rc.1→rc.2 shows every slot, client service and imported symbol the board uses
-  is unchanged or purely additive. No runtime GUI pass was done in that sweep —
-  the board was not restarted onto rc.2.
+  is unchanged or purely additive. The board was **not** restarted onto rc.2 for a browser GUI pass at the time of
+  writing; since then the host half has been running on dsh 0.1.7-rc.2 (the
+  string "no GUI pass" refers to the browser half only).
 
 ## [0.2.9] - 2026-09-23
 

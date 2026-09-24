@@ -33,7 +33,7 @@ node scripts/verify-tools.mjs
 which boots `systemPrompt + ToolRuntime + FakeWebServer + kanban` on a bare
 cordis context and prints the registered `board_*` tool names. The Web page and
 the route are exercised against a real `dsh web` (install into a profile,
-restart, open the sidebar 「看板」).
+restart, open the sidebar 「思磨力看板」).
 
 ## Release contents (per version)
 
@@ -112,6 +112,8 @@ The gate is **automated and blocking**:
 - A workspace owns one board; plans are expressed via tags or card groups.
 - The `KANBAN.json` shape is validated on read — never silently repair a broken
   hand edit; fail loud instead.
-- The plugin **only writes** board/note files; there is no startup, scheduled,
-  or install-time cleanup. Cards are removed only by explicit `board_remove` /
-  the Web delete button; excess done cards are archived, never deleted.
+- The plugin **only writes** board/note files (plus the `~/.agents/skills` copy
+  of the kanban-use skill on a shell without a skill registry); there is no
+  startup, scheduled, or install-time cleanup. Cards are removed only by explicit
+  `board_remove` / the Web delete button; excess done cards (beyond 100, oldest
+  first) are archived, never deleted.
