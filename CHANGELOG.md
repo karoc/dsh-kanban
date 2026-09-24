@@ -28,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests
 
+- **Guarantee gate, now part of `npm test`.** `docs/guarantees.md` lists the
+  promises this plugin must not break — done cards are **archived, never
+  deleted**; a structurally broken or invalid `KANBAN.json` **fails loud**
+  instead of being silently repaired; unknown ids/statuses are rejected; the
+  workspace path must be absolute — and names the test title that pins each one;
+  `scripts/check-guarantees.mjs` fails the suite when a title disappears
+  (13 rows today). Verified by negative control: a row pointing at a
+  non-existent title makes the gate FAIL.
 - **Type-checked against DSH 0.1.7-rc.2** (2026-09-25): `tsc --noEmit` is green
   for both halves with the rc.2 type surface, and a seam-by-seam diff of
   rc.1→rc.2 shows every slot, client service and imported symbol the board uses
