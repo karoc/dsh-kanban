@@ -13,10 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `package.json` declares an optional peer on
   `@deepseek-ai/dsh-client-ui-slots: ">=0.1.7-rc.1"`. The gate that reads it ships from **DSH 0.1.7-rc.1** on — it compares every
   `@deepseek-ai/dsh*` peer against the running runtime and refuses a plugin the
-  runtime fails, printing the `dsh plugin allow-version` remedy. Runtimes older
-  than that gate (0.1.7-alpha.1/2 and all of 0.1.2–0.1.6) evaluate **no** peers:
-  they still load the board and fail in the client half, so **0.2.8 remains the
-  release for 0.1.2–0.1.6**. Verified live: the board (host half) is loaded on
+  runtime fails, printing the `dsh plugin allow-version` remedy. Runtimes older than that gate
+  evaluate **no** peers and refuse nothing: on 0.1.2–0.1.6 the client half cannot
+  render (the `*Regular` icon names it imports arrived in 0.1.7-alpha.1), so
+  **0.2.8 remains the release for 0.1.2–0.1.6** — the 0.1.7 alphas already have
+  those icons and work. Verified live: the board (host half) is loaded on
   dsh 0.1.7-rc.2, which evaluated this range at startup. It is marked
   `peerDependenciesMeta.optional` because the host supplies that package at
   runtime — npm therefore installs nothing extra. The prerelease rule the range encodes (measured with the semver DSH actually
