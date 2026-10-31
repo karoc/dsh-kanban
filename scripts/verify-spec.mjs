@@ -8,6 +8,7 @@ const { Context, Service } = await import('@deepseek-ai/cordis')
 const { default: SystemPrompt } = await import('@deepseek-ai/dsh-system-prompt')
 const { ToolRuntime } = await import('@deepseek-ai/dsh-tools')
 const kanban = await import('../lib/index.js')
+const { executeTool, installToolExecutor } = await import('./lib/tool-exec.mjs')
 
 class FakeWebServer extends Service {
   constructor(ctx) { super(ctx, 'webServer') }
@@ -30,13 +31,14 @@ await writeFile(join(ws, '.agents', 'notes', 'overrides.json'), JSON.stringify({
 const ctx = new Context()
 await ctx.plugin(SystemPrompt, {})
 await ctx.plugin(ToolRuntime, {})
+await installToolExecutor(ctx)
 await ctx.plugin(FakeWebServer)
 await ctx.plugin(FakeCommands)
 await ctx.plugin(kanban)
 await new Promise(resolve => setTimeout(resolve, 200))
 
 const agent = { id: 'session-spec-1', session: { header: { cwd: ws } } }
-const result = await ctx.tools.execute({
+const result = await executeTool(ctx, {
   callId: 'call-spec-1',
   name: 'note_add',
   arguments: {
@@ -60,7 +62,7 @@ const usesCustom = md.startsWith('# Note: custom-format') && md.includes('## Pro
 console.log('uses custom template:', usesCustom)
 
 // Overridden class that is NOT in the effective list must be rejected.
-const bad = await ctx.tools.execute({
+const bad = await executeTool(ctx, {
   callId: 'call-spec-2',
   name: 'note_add',
   arguments: {

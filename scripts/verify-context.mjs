@@ -13,6 +13,7 @@ const { Context, Service } = await import('@deepseek-ai/cordis')
 const { default: SystemPrompt, renderContextSnapshot } = await import('@deepseek-ai/dsh-system-prompt')
 const { ToolRuntime } = await import('@deepseek-ai/dsh-tools')
 const kanban = await import('../lib/index.js')
+const { installToolExecutor } = await import('./lib/tool-exec.mjs')
 
 class FakeWebServer extends Service {
   constructor(ctx) { super(ctx, 'webServer') }
@@ -38,6 +39,7 @@ await writeFile(join(ws, 'KANBAN.json'), JSON.stringify({
 const ctx = new Context()
 await ctx.plugin(SystemPrompt, {})
 await ctx.plugin(ToolRuntime, {})
+await installToolExecutor(ctx)
 await ctx.plugin(FakeWebServer)
 await ctx.plugin(FakeCommands)
 await ctx.plugin(kanban)

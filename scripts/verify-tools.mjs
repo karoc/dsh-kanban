@@ -12,6 +12,7 @@ const { Context, Service } = await import('@deepseek-ai/cordis')
 const { default: SystemPrompt } = await import('@deepseek-ai/dsh-system-prompt')
 const { ToolRuntime } = await import('@deepseek-ai/dsh-tools')
 const kanban = await import('../lib/index.js')
+const { executeTool, installToolExecutor } = await import('./lib/tool-exec.mjs')
 
 class FakeWebServer extends Service {
   constructor(ctx) { super(ctx, 'webServer') }
@@ -26,6 +27,7 @@ class FakeCommands extends Service {
 const ctx = new Context()
 await ctx.plugin(SystemPrompt, {})
 await ctx.plugin(ToolRuntime, {})
+await installToolExecutor(ctx)
 await ctx.plugin(FakeWebServer)
 await ctx.plugin(FakeCommands)
 await ctx.plugin(kanban)
@@ -57,7 +59,7 @@ const fakeAgent = {
   id: 'session-verify-1',
   session: { header: { cwd: ws } },
 }
-const noteResult = await ctx.tools.execute({
+const noteResult = await executeTool(ctx, {
   callId: 'call-note-1',
   name: 'note_add',
   arguments: {
@@ -79,7 +81,7 @@ if (!noteText.includes('.agents/notes/implemented/feature/')) {
 
 // 2) board_add executes end-to-end: the owning agent's session cwd resolves the
 // workspace and the card lands in <cwd>/KANBAN.json.
-const result = await ctx.tools.execute({
+const result = await executeTool(ctx, {
   callId: 'call-verify-1',
   name: 'board_add',
   arguments: { title: '真实执行验证' },

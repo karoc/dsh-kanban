@@ -34,6 +34,7 @@ const { default: SkillRegistry } = await import('@deepseek-ai/dsh-skill')
 const { default: SystemPrompt } = await import('@deepseek-ai/dsh-system-prompt')
 const { ToolRuntime } = await import('@deepseek-ai/dsh-tools')
 const kanban = await import('../lib/index.js')
+const { installToolExecutor } = await import('./lib/tool-exec.mjs')
 
 // --- 3) The shipped SKILL.md parses with the plugin's own reader ------------
 const skillText = readFileSync(resolve(root, 'skills', 'kanban-use', 'SKILL.md'), 'utf8')
@@ -63,6 +64,7 @@ class FakeCommands extends Service {
 const ctx = new Context()
 await ctx.plugin(SystemPrompt, {})
 await ctx.plugin(ToolRuntime, {})
+await installToolExecutor(ctx)
 await ctx.plugin(FakeWebServer)
 await ctx.plugin(FakeCommands)
 await ctx.plugin(SkillRegistry, {})
