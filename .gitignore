@@ -1,5 +1,5 @@
 node_modules/
-lib/
+/lib/
 *.tsbuildinfo
 # Workspace-local runtime data (never committed): the board store, Agent
 # Notes, and generated icon-gallery artifacts.
