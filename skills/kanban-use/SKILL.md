@@ -1,6 +1,6 @@
 ---
 name: kanban-use
-skill-version: 3
+skill-version: 4
 description: "Use when creating, updating, or closing kanban board cards (board_list / board_add / board_update / board_remove), when the user states a multi-step plan or list of tasks that should outlive this turn, when resuming work in a workspace that has an open board, or when asked how the board should be used. Teaches the card-completeness discipline: every card carries why (rationale), rejected alternatives when a decision was made, and a done card is self-explanatory with all three what/why/rejected fields so the next session can pick the work up without asking."
 ---
 
@@ -79,8 +79,10 @@ description: "Use when creating, updating, or closing kanban board cards (board_
 
 ## 5. 推进（board_update）
 
-- 开始做某步 → 移 `in_progress`；完成 → 移 `done`；被取代/废弃 → 移 `done`
+- 开始做某步 → 移 `in_progress`（**认领**）；完成 → 移 `done`；被取代/废弃 → 移 `done`
   或 `board_remove`（说明原因写进 rejected 或 description，别无声删除）。
+- 看板由**所有会话/所有 agent 共享**：开工前先看 `sourceSessionId`，别覆盖另一个
+  会话正在 `in_progress` 的卡；同一件事两边都需要时，拆卡而不是抢同一张。
 - 决策途中出现取舍（"决定不做 X，因为 Y"）→ 随时补进 `rejected`。
 - 一律先 `board_list` 拿真实 id 再 update；id 精确匹配，不要凭记忆。
 
@@ -96,6 +98,8 @@ description: "Use when creating, updating, or closing kanban board cards (board_
 
 **关闭检查清单**：这张 done 卡，下一个会话不问任何人，能回答——
 做什么了？为什么做？放弃/排除了什么？三问任一答不出 → 卡还没写完。
+交付物能验证时，`summary` 里带上坐标（commit/PR 号、命令输出、产物路径）——
+没有坐标的「已完成」不是可交接的状态。
 
 ## 7. 恢复会话
 
@@ -104,7 +108,14 @@ description: "Use when creating, updating, or closing kanban board cards (board_
 - 看到带缺字段标注的卡 → 主动补 `rationale`（以及能补的 `rejected`），再开
   始干对应的活 —— 补字段本身就是推进。
 
-## 8. 与 Web 看板页的配合
+## 8. 工具输出与过滤（省 token）
+
+- `board_add` / `board_update` / `board_remove` 只回**本次触碰的那张卡** + 计数，
+  不再回显整块看板；需要全量时用 `board_list`。
+- `board_list` 支持 `status` / `tag` / `limit` 过滤；`counts` 始终统计**整块看板**
+  （不受过滤影响）。大看板先按 `status: "in_progress"` 取在手工作，再按需取 todo。
+
+## 9. 与 Web 看板页的配合
 
 - 看板页每 15s 自动刷新：模型写入后页面自动可见。
 - 缺字段的卡在页面上显示「缺字段：…」警告行 —— 用户侧也能看到不完整，
@@ -112,7 +123,7 @@ description: "Use when creating, updating, or closing kanban board cards (board_
 - 人的 `/kanban` 命令输出同样带 `⚠️缺` 标注。
 - 想确认工作区卡片整体质量，可运行仓库脚本 `node scripts/audit-cards.mjs <workspace> --fail`。
 
-## 9. 模板速查
+## 10. 模板速查
 
 创建模板：
 

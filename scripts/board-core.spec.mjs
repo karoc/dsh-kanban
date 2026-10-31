@@ -19,6 +19,11 @@ import {
   updateCard,
 } from '../src/board-core.ts'
 
+/** Mutation helpers: tests assert on the fresh view, not the mutation envelope. */
+const add = async (ws, input) => (await addCard(ws, input)).view
+const update = async (ws, id, input) => (await updateCard(ws, id, input)).view
+const remove = async (ws, id) => (await removeCard(ws, id)).view
+
 /** Create a fresh temp workspace per test. */
 async function freshWorkspace() {
   return await mkdtemp(join(tmpdir(), 'kanban-test-'))
@@ -58,7 +63,7 @@ test('readBoard fails loud on invalid JSON', async () => {
 
 test('addCard writes the card and persists to disk with version 1', async () => {
   const ws = await freshWorkspace()
-  const view = await addCard(ws, { title: '实现看板', description: '跨会话', tags: ['dsh'] })
+  const view = await add(ws, { title: '实现看板', description: '跨会话', tags: ['dsh'] })
   assert.equal(view.cards.length, 1)
   const card = view.cards[0]
   assert.equal(card.title, '实现看板')
@@ -90,17 +95,17 @@ test('addCard rejects unknown statuses', async () => {
 
 test('addCard normalizes tags (trim, drop empties, dedupe)', async () => {
   const ws = await freshWorkspace()
-  const view = await addCard(ws, { title: 'x', tags: [' dsh ', '', 'dsh', 'urgent'] })
+  const view = await add(ws, { title: 'x', tags: [' dsh ', '', 'dsh', 'urgent'] })
   assert.deepEqual(view.cards[0].tags, ['dsh', 'urgent'])
   await rm(ws, { recursive: true, force: true })
 })
 
 test('updateCard moves status and bumps updatedAt', async () => {
   const ws = await freshWorkspace()
-  const added = await addCard(ws, { title: '任务' })
+  const added = await add(ws, { title: '任务' })
   const id = added.cards[0].id
   const before = added.cards[0].updatedAt
-  const view = await updateCard(ws, id, { status: 'in_progress' })
+  const view = await update(ws, id, { status: 'in_progress' })
   assert.equal(view.cards[0].status, 'in_progress')
   assert.ok(view.cards[0].updatedAt >= before)
   assert.equal(view.counts.inProgress, 1)
@@ -115,25 +120,25 @@ test('updateCard rejects unknown ids', async () => {
 
 test('updateCard clears description with empty string', async () => {
   const ws = await freshWorkspace()
-  const added = await addCard(ws, { title: 'x', description: 'note' })
+  const added = await add(ws, { title: 'x', description: 'note' })
   const id = added.cards[0].id
-  const view = await updateCard(ws, id, { description: '' })
+  const view = await update(ws, id, { description: '' })
   assert.equal(view.cards[0].description, undefined)
   await rm(ws, { recursive: true, force: true })
 })
 
 test('updateCard requires at least one field', async () => {
   const ws = await freshWorkspace()
-  const added = await addCard(ws, { title: 'x' })
+  const added = await add(ws, { title: 'x' })
   await assert.rejects(() => updateCard(ws, added.cards[0].id, {}), /at least one field/)
   await rm(ws, { recursive: true, force: true })
 })
 
 test('removeCard deletes the card and returns the fresh view', async () => {
   const ws = await freshWorkspace()
-  const a = await addCard(ws, { title: 'a' })
-  const b = await addCard(ws, { title: 'b' })
-  const view = await removeCard(ws, a.cards[0].id)
+  const a = await add(ws, { title: 'a' })
+  const b = await add(ws, { title: 'b' })
+  const view = await remove(ws, a.cards[0].id)
   assert.equal(view.cards.length, 1)
   assert.equal(view.cards[0].title, 'b')
   await assert.rejects(() => removeCard(ws, a.cards[0].id), /no card/)
@@ -142,7 +147,7 @@ test('removeCard deletes the card and returns the fresh view', async () => {
 
 test('addCard stores the what/why/rejected fields', async () => {
   const ws = await freshWorkspace()
-  const view = await addCard(ws, {
+  const view = await add(ws, {
     title: '决策笔记',
     summary: '做了看板插件',
     rationale: '跨会话不丢',
@@ -156,13 +161,13 @@ test('addCard stores the what/why/rejected fields', async () => {
 
 test('updateCard sets and clears the what/why/rejected fields', async () => {
   const ws = await freshWorkspace()
-  const added = await addCard(ws, { title: 'x' })
+  const added = await add(ws, { title: 'x' })
   const id = added.cards[0].id
-  const set = await updateCard(ws, id, { summary: 's', rationale: 'r', rejected: 'x' })
+  const set = await update(ws, id, { summary: 's', rationale: 'r', rejected: 'x' })
   assert.equal(set.cards[0].summary, 's')
   assert.equal(set.cards[0].rationale, 'r')
   assert.equal(set.cards[0].rejected, 'x')
-  const cleared = await updateCard(ws, id, { summary: '', rationale: '' })
+  const cleared = await update(ws, id, { summary: '', rationale: '' })
   assert.equal(cleared.cards[0].summary, undefined)
   assert.equal(cleared.cards[0].rationale, undefined)
   assert.equal(cleared.cards[0].rejected, 'x')
@@ -200,7 +205,7 @@ test('shape guards accept valid values and reject invalid ones', () => {
 
 test('addCard records the source session id', async () => {
   const ws = await freshWorkspace()
-  const view = await addCard(ws, { title: 's', sourceSessionId: 'session-abc' })
+  const view = await add(ws, { title: 's', sourceSessionId: 'session-abc' })
   assert.equal(view.cards[0].sourceSessionId, 'session-abc')
   await rm(ws, { recursive: true, force: true })
 })
@@ -212,7 +217,7 @@ test('done cards beyond MAX_DONE_CARDS are archived to .agents/notes/archive.jso
   const total = MAX_DONE_CARDS + 5
   let last
   for (let i = 0; i < total; i++) {
-    last = await addCard(ws, { title: `done-${i}`, status: 'done' })
+    last = await add(ws, { title: `done-${i}`, status: 'done' })
   }
   // Live board keeps at most MAX_DONE_CARDS done cards.
   const doneLive = last.cards.filter(c => c.status === 'done').length
@@ -244,5 +249,23 @@ test('renameWithRetry succeeds when the target is briefly held open (Windows EPE
   const raw = JSON.parse(await readFile(target, 'utf8'))
   assert.equal(raw.cards.length, 1)
   assert.equal(raw.cards[0].id, 'card-1')
+  await rm(ws, { recursive: true, force: true })
+})
+
+test('concurrent addCard calls keep every card (board lock prevents lost updates)', async () => {
+  const ws = await freshWorkspace()
+  const titles = Array.from({ length: 8 }, (_, index) => `并发-${index}`)
+  await Promise.all(titles.map(title => addCard(ws, { title })))
+  const board = await readBoard(ws)
+  assert.equal(board.cards.length, titles.length)
+  assert.deepEqual([...board.cards].map(card => card.title).sort(), [...titles].sort())
+  await rm(ws, { recursive: true, force: true })
+})
+
+test('a failed mutation releases the board lock', async () => {
+  const ws = await freshWorkspace()
+  await assert.rejects(() => updateCard(ws, 'card-missing', { status: 'done' }), /no card/)
+  const added = await addCard(ws, { title: 'after failure' })
+  assert.equal(added.view.cards.length, 1)
   await rm(ws, { recursive: true, force: true })
 })

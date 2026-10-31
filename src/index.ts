@@ -45,6 +45,7 @@ import {
   readBoardSync,
   removeCard,
   updateCard,
+  type BoardMutation,
   type BoardStatus,
   type BoardView,
 } from './board-core.ts'
@@ -99,74 +100,120 @@ export interface BoardToolValue {
   archived?: { count: number; path: string }
 }
 
+/** The write-op tool output: only the card the operation touched. */
+export interface BoardToolWriteValue {
+  path: string
+  card?: BoardToolCard
+  removedId?: string
+  counts: { todo: number; inProgress: number; done: number }
+  archived?: { count: number; path: string }
+}
+
+/** Project one persisted card onto the tool-facing card shape. */
+function toToolCard(card: BoardView['cards'][number]): BoardToolCard {
+  return {
+    id: card.id,
+    title: card.title,
+    ...card.description === undefined ? {} : { description: card.description },
+    ...card.summary === undefined ? {} : { summary: card.summary },
+    ...card.rationale === undefined ? {} : { rationale: card.rationale },
+    ...card.rejected === undefined ? {} : { rejected: card.rejected },
+    ...card.sourceSessionId === undefined ? {} : { sourceSessionId: card.sourceSessionId },
+    status: card.status,
+    tags: card.tags,
+    createdAt: card.createdAt,
+    updatedAt: card.updatedAt,
+  }
+}
+
 /** Build a {@link BoardToolValue} from a {@link BoardView}. */
 function toBoardValue(view: BoardView): BoardToolValue {
   return {
     path: view.path,
-    cards: view.cards.map(card => ({
-      id: card.id,
-      title: card.title,
-      ...card.description === undefined ? {} : { description: card.description },
-      ...card.summary === undefined ? {} : { summary: card.summary },
-      ...card.rationale === undefined ? {} : { rationale: card.rationale },
-      ...card.rejected === undefined ? {} : { rejected: card.rejected },
-      ...card.sourceSessionId === undefined ? {} : { sourceSessionId: card.sourceSessionId },
-      status: card.status,
-      tags: card.tags,
-      createdAt: card.createdAt,
-      updatedAt: card.updatedAt,
-    })),
+    cards: view.cards.map(toToolCard),
     counts: view.counts,
     ...view.archived !== undefined ? { archived: view.archived } : {},
   }
 }
 
-/** Canonical board output shared by every tool: the full fresh board view. */
+/**
+ * Build a {@link BoardToolWriteValue} from one mutation. Write ops return only
+ * the touched card: echoing the whole board on every write burned ~2k tokens
+ * per operation on a mature board (108 cards) while the caller needs one line.
+ * `board_list` remains the full read path.
+ * @param mutation - the mutation outcome from board-core.
+ * @returns the card-scoped tool value.
+ */
+function toWriteValue(mutation: BoardMutation): BoardToolWriteValue {
+  return {
+    path: mutation.view.path,
+    ...mutation.card !== undefined ? { card: toToolCard(mutation.card) } : {},
+    ...mutation.removedId !== undefined ? { removedId: mutation.removedId } : {},
+    counts: mutation.view.counts,
+    ...mutation.view.archived !== undefined ? { archived: mutation.view.archived } : {},
+  }
+}
+
+  /** Card shape shared by the read and write tool outputs. */
+const BOARD_CARD_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', required: true },
+    title: { type: 'string', required: true },
+    description: { type: 'string' },
+    summary: { type: 'string' },
+    rationale: { type: 'string' },
+    rejected: { type: 'string' },
+    sourceSessionId: { type: 'string' },
+    status: { type: 'string', required: true, enum: ['todo', 'in_progress', 'done'] },
+    tags: { type: 'array', required: true, items: { type: 'string' } },
+    createdAt: { type: 'integer', required: true },
+    updatedAt: { type: 'integer', required: true },
+  },
+} as const
+
+/** Board counters shared by both tool outputs. */
+const BOARD_COUNTS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: true,
+  properties: {
+    todo: { type: 'integer', required: true },
+    inProgress: { type: 'integer', required: true },
+    done: { type: 'integer', required: true },
+  },
+} as const
+
+/** Archive notice shared by both tool outputs. */
+const BOARD_ARCHIVED_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    count: { type: 'integer', required: true },
+    path: { type: 'string', required: true },
+  },
+} as const
+
+/** One card as a single render line (title, tags, missing-field flags). */
+function renderCardLine(card: BoardToolCard): string {
+  const missing = missingCardFields(card)
+  const mark = missing.length > 0
+    ? ` ⚠️缺:${missing.map(field => CARD_FIELD_LABELS[field]).join(',')}`
+    : ''
+  return `- [${card.status}] ${card.title}${card.tags.length > 0 ? ` ${card.tags.map(t => `#${t}`).join(' ')}` : ''}${mark}`
+}
+
+/** Full-board output: only board_list reads every card. */
 const BOARD_OUTPUT = {
   schema: {
     type: 'object',
     additionalProperties: false,
     properties: {
       path: { type: 'string', required: true },
-      cards: {
-        type: 'array',
-        required: true,
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            id: { type: 'string', required: true },
-            title: { type: 'string', required: true },
-            description: { type: 'string' },
-            summary: { type: 'string' },
-            rationale: { type: 'string' },
-            rejected: { type: 'string' },
-            sourceSessionId: { type: 'string' },
-            status: { type: 'string', required: true, enum: ['todo', 'in_progress', 'done'] },
-            tags: { type: 'array', required: true, items: { type: 'string' } },
-            createdAt: { type: 'integer', required: true },
-            updatedAt: { type: 'integer', required: true },
-          },
-        },
-      },
-      counts: {
-        type: 'object',
-        additionalProperties: false,
-        required: true,
-        properties: {
-          todo: { type: 'integer', required: true },
-          inProgress: { type: 'integer', required: true },
-          done: { type: 'integer', required: true },
-        },
-      },
-      archived: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          count: { type: 'integer', required: true },
-          path: { type: 'string', required: true },
-        },
-      },
+      cards: { type: 'array', required: true, items: BOARD_CARD_SCHEMA },
+      counts: BOARD_COUNTS_SCHEMA,
+      archived: BOARD_ARCHIVED_SCHEMA,
     },
   } as const,
   render: (_args: unknown, value: BoardToolValue) => {
@@ -176,13 +223,7 @@ const BOARD_OUTPUT = {
         type: 'text' as const,
         text: [
           `Board at ${value.path}`,
-          ...value.cards.map(card => {
-            const missing = missingCardFields(card)
-            const mark = missing.length > 0
-              ? ` ⚠️缺:${missing.map(field => CARD_FIELD_LABELS[field]).join(',')}`
-              : ''
-            return `- [${card.status}] ${card.title}${card.tags.length > 0 ? ` ${card.tags.map(t => `#${t}`).join(' ')}` : ''}${mark}`
-          }),
+          ...value.cards.map(renderCardLine),
           ...value.cards.length === 0 ? ['(no cards yet)'] : [],
           ...incomplete > 0
             ? [`⚠️ ${incomplete} card(s) missing fields — fill the flagged 为什么 (why), and for done cards 做了什么 (what) + 放弃了什么 (rejected), when you can.`]
@@ -193,6 +234,35 @@ const BOARD_OUTPUT = {
         ].join('\n'),
       },
     ]
+  },
+}
+
+/** Write-op output: the touched card plus counters (never the whole board). */
+const BOARD_WRITE_OUTPUT = {
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      path: { type: 'string', required: true },
+      card: BOARD_CARD_SCHEMA,
+      removedId: { type: 'string' },
+      counts: BOARD_COUNTS_SCHEMA,
+      archived: BOARD_ARCHIVED_SCHEMA,
+    },
+  } as const,
+  render: (_args: unknown, value: BoardToolWriteValue) => {
+    const lines = [`Board at ${value.path}`]
+    if (value.card !== undefined) {
+      lines.push(renderCardLine(value.card))
+      const missing = missingCardFields(value.card)
+      if (missing.length > 0) {
+        lines.push(`⚠️ 此卡缺 ${missing.map(field => CARD_FIELD_LABELS[field]).join(',')} — 补齐后才能被别人接手。`)
+      }
+    }
+    if (value.removedId !== undefined) lines.push(`Removed card ${value.removedId}.`)
+    lines.push(`counts: todo=${value.counts.todo} in_progress=${value.counts.inProgress} done=${value.counts.done}`)
+    if (value.archived !== undefined) lines.push(`Archived ${value.archived.count} done card(s) to ${value.archived.path}`)
+    return [{ type: 'text' as const, text: lines.join('\n') }]
   },
 }
 
@@ -241,6 +311,10 @@ const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) b
   + 'is the transient in-turn task list, while the board is the durable cross-session '
   + 'record. Check board_list when resuming work in a workspace to pick up what was planned '
   + 'before.\n\n'
+  + 'The board is shared by every session and agent working in this workspace: move a card to '
+  + 'in_progress before you start it (claim it), and do not overwrite a card another session is '
+  + 'already working on — cards record sourceSessionId, so check it with board_list first. When two '
+  + 'sessions need the same work, split the card rather than racing on it.\n\n'
   + 'Close the loop at the end of every work session: when the user\'s request is done or '
   + 'reaches a clear stopping point, update the board to reflect reality — move completed '
   + 'cards to done, add any new follow-up as a todo card, and make every done card '
@@ -249,7 +323,9 @@ const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) b
   + 'considered and given up, with why). Do not leave cards in stale states (e.g. '
   + 'in_progress with no work left) and do not close a card without its three fields — the '
   + 'board must be an honest hand-off for the next session, not a backlog that drifts. This '
-  + 'wrap-up is what makes the board a durable memory across sessions.\n\n'
+  + 'wrap-up is what makes the board a durable memory across sessions. When a card ships, cite '
+  + 'verifiable coordinates in its summary where they exist (commit/PR id, command output, artifact '
+  + 'path) — "done" without a coordinate is not a hand-off the next session can check.\n\n'
   + 'The full card-writing discipline (field semantics, examples, good/bad cards, '
   + 'templates) lives in the kanban-use skill — load it when it is available.\n\n'
   + 'You also maintain Agent Notes (the note_add / note_list tools) at '
@@ -332,7 +408,7 @@ async function executeBoardCommand(ctx: Context, invocation: CommandInvocation):
   const input = invocation.rawInput.trim()
   const done = async (id: string): Promise<CommandResult> => {
     try {
-      const view = await updateCard(cwd, id, { status: 'done' })
+      const { view } = await updateCard(cwd, id, { status: 'done' })
       return renderBoardResult('Marked done.', view)
     } catch (error) {
       return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
@@ -536,34 +612,39 @@ export function apply(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: 'board_list',
-    description: 'Read the current workspace kanban board (all cards with their status, tags, and timestamps). '
-      + 'Call this before board_add / board_update / board_remove so you operate on real ids and current state. '
-      + 'The board is persisted to KANBAN.json at the workspace root and survives across sessions and branches.',
-    parameters: {},
+    description: 'Read the current workspace kanban board. Call this before board_add / board_update / board_remove so '
+      + 'you operate on real ids and current state. Optional filters narrow the returned cards; counts always describe '
+      + 'the whole board. The board is persisted to KANBAN.json at the workspace root and survives across sessions and branches.',
+    parameters: {
+      status: {
+        type: 'string',
+        enum: STATUSES,
+        description: 'Only return cards in this status.',
+      },
+      tag: {
+        type: 'string',
+        description: 'Only return cards carrying this tag (without the leading "#").',
+      },
+      limit: {
+        type: 'integer',
+        description: 'Return at most this many cards after filtering.',
+      },
+    },
     output: BOARD_OUTPUT,
-    execute(_args, exec) {
+    execute(args, exec) {
       const cwd = workspaceOf(exec.agent?.session.header.cwd)
-      return readBoard(cwd).then(board => ({
-        path: `${cwd}/KANBAN.json`,
-        cards: board.cards.map(card => ({
-          id: card.id,
-          title: card.title,
-          ...card.description === undefined ? {} : { description: card.description },
-          ...card.summary === undefined ? {} : { summary: card.summary },
-          ...card.rationale === undefined ? {} : { rationale: card.rationale },
-          ...card.rejected === undefined ? {} : { rejected: card.rejected },
-          ...card.sourceSessionId === undefined ? {} : { sourceSessionId: card.sourceSessionId },
-          status: card.status,
-          tags: card.tags,
-          createdAt: card.createdAt,
-          updatedAt: card.updatedAt,
-        })),
-        counts: {
+      return readBoard(cwd).then(board => {
+        const counts = {
           todo: board.cards.filter(c => c.status === 'todo').length,
           inProgress: board.cards.filter(c => c.status === 'in_progress').length,
           done: board.cards.filter(c => c.status === 'done').length,
-        },
-      }))
+        }
+        let cards = board.cards
+        if (args.status !== undefined) cards = cards.filter(card => card.status === args.status)
+        if (args.tag !== undefined) cards = cards.filter(card => card.tags.includes(args.tag as string))
+        if (args.limit !== undefined) cards = cards.slice(0, args.limit)
+        return { path: `${cwd}/KANBAN.json`, cards: cards.map(toToolCard), counts }
+      })
     },
     presentCall: () => present('Read kanban board', 'read'),
   }))
@@ -608,7 +689,7 @@ export function apply(ctx: Context): void {
         description: 'Optional labels (e.g. ["dsh", "urgent"]).',
       },
     },
-    output: BOARD_OUTPUT,
+    output: BOARD_WRITE_OUTPUT,
     execute(args, exec) {
       const cwd = workspaceOf(exec.agent?.session.header.cwd)
       return addCard(cwd, {
@@ -620,7 +701,7 @@ export function apply(ctx: Context): void {
         ...exec.agent !== undefined ? { sourceSessionId: exec.agent.id } : {},
         ...args.status === undefined ? {} : { status: args.status as BoardStatus },
         ...args.tags === undefined ? {} : { tags: args.tags },
-      }).then(toBoardValue)
+      }).then(toWriteValue)
     },
     presentCall: args => present('Add kanban card', 'other', (args as { title: string }).title),
   }))
@@ -650,7 +731,7 @@ export function apply(ctx: Context): void {
       rejected: { type: 'string', description: 'Replacement "what was rejected"; empty string clears it.' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Replacement tags.' },
     },
-    output: BOARD_OUTPUT,
+    output: BOARD_WRITE_OUTPUT,
     execute(args, exec) {
       const cwd = workspaceOf(exec.agent?.session.header.cwd)
       const patch: {
@@ -669,7 +750,7 @@ export function apply(ctx: Context): void {
       if (args.rationale !== undefined) patch.rationale = args.rationale
       if (args.rejected !== undefined) patch.rejected = args.rejected
       if (args.tags !== undefined) patch.tags = args.tags
-      return updateCard(cwd, args.id, patch).then(toBoardValue)
+      return updateCard(cwd, args.id, patch).then(toWriteValue)
     },
     presentCall: args => present(
       'Update kanban card',
@@ -687,10 +768,10 @@ export function apply(ctx: Context): void {
     parameters: {
       id: { type: 'string', required: true, description: 'Exact card id returned by board_list.' },
     },
-    output: BOARD_OUTPUT,
+    output: BOARD_WRITE_OUTPUT,
     execute(args, exec) {
       const cwd = workspaceOf(exec.agent?.session.header.cwd)
-      return removeCard(cwd, args.id).then(toBoardValue)
+      return removeCard(cwd, args.id).then(toWriteValue)
     },
     presentCall: args => present('Remove kanban card', 'other', (args as { id: string }).id),
   }))
@@ -828,7 +909,7 @@ async function applyMutation(cwd: string, body: {
 }): Promise<BoardView> {
   switch (body.op) {
     case 'add':
-      return await addCard(cwd, {
+      return (await addCard(cwd, {
         title: body.title ?? '',
         ...body.description === undefined ? {} : { description: body.description },
         ...body.summary === undefined ? {} : { summary: body.summary },
@@ -836,7 +917,7 @@ async function applyMutation(cwd: string, body: {
         ...body.rejected === undefined ? {} : { rejected: body.rejected },
         ...body.status === undefined ? {} : { status: body.status },
         ...body.tags === undefined ? {} : { tags: body.tags },
-      })
+      })).view
     case 'update': {
       if (body.id === undefined) throw new TypeError('kanban: update requires id')
       const patch: {
@@ -855,11 +936,11 @@ async function applyMutation(cwd: string, body: {
       if (body.rejected !== undefined) patch.rejected = body.rejected
       if (body.status !== undefined) patch.status = body.status
       if (body.tags !== undefined) patch.tags = body.tags
-      return await updateCard(cwd, body.id, patch)
+      return (await updateCard(cwd, body.id, patch)).view
     }
     case 'remove':
       if (body.id === undefined) throw new TypeError('kanban: remove requires id')
-      return await removeCard(cwd, body.id)
+      return (await removeCard(cwd, body.id)).view
     default:
       throw new TypeError(`kanban: unknown op ${JSON.stringify(body.op)}`)
   }

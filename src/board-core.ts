@@ -11,8 +11,9 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { closeSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { dirname, isAbsolute, join } from 'node:path'
 
 /** The single git-trackable board filename at the workspace root. */
@@ -287,6 +288,89 @@ function viewOf(cwd: string, board: BoardData, archived?: { count: number; path:
   }
 }
 
+/** Path of the advisory lock guarding one board's read-modify-write. */
+export function boardLockPath(cwd: string): string {
+  return `${boardPath(cwd)}.lock`
+}
+
+/** How long a writer waits for the board lock before failing loudly. */
+const BOARD_LOCK_WAIT_MS = 5_000
+/** A lock file older than this belongs to a crashed writer and may be broken. */
+const BOARD_LOCK_STALE_MS = 15_000
+/** Retry interval while another writer holds the lock. */
+const BOARD_LOCK_RETRY_MS = 25
+
+/**
+ * Acquire the advisory board lock (`KANBAN.json.lock`, created with O_EXCL).
+ * Multiple sessions/agents share one KANBAN.json; without this a read-modify-write
+ * pair can lose an update (each writer reads the same snapshot, last rename wins).
+ * The lock is deliberately short-lived: every mutation holds it only for its own
+ * read → mutate → atomic rename. A crashed writer is recovered by breaking a lock
+ * older than {@link BOARD_LOCK_STALE_MS}.
+ * @param cwd - absolute workspace root.
+ * @returns the release function (idempotent, best-effort).
+ */
+async function acquireBoardLock(cwd: string): Promise<() => void> {
+  const lock = boardLockPath(cwd)
+  const deadline = Date.now() + BOARD_LOCK_WAIT_MS
+  for (;;) {
+    try {
+      const fd = openSync(lock, 'wx')
+      try {
+        writeFileSync(fd, `${process.pid} ${Date.now()}`, 'utf8')
+      } finally {
+        closeSync(fd)
+      }
+      return () => {
+        try {
+          unlinkSync(lock)
+        } catch {
+          // Already released (or broken as stale): nothing to clean up.
+        }
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > BOARD_LOCK_STALE_MS) {
+          unlinkSync(lock)
+          continue
+        }
+      } catch {
+        continue // The lock vanished between open and stat: retry immediately.
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`kanban: board is locked by another writer (${lock}); retry the operation`)
+      }
+      await sleep(BOARD_LOCK_RETRY_MS)
+    }
+  }
+}
+
+/**
+ * Run one board mutation under the advisory lock.
+ * @param cwd - absolute workspace root.
+ * @param fn - read → mutate → write body; must not call another locked mutation.
+ * @returns the body's result.
+ */
+export async function withBoardLock<T>(cwd: string, fn: () => Promise<T>): Promise<T> {
+  const release = await acquireBoardLock(cwd)
+  try {
+    return await fn()
+  } finally {
+    release()
+  }
+}
+
+/** One mutation's outcome: the fresh board plus the card it touched. */
+export interface BoardMutation {
+  /** The fresh board view (same shape the Web route and `/kanban` render). */
+  view: BoardView
+  /** The created or updated card; undefined for a removal. */
+  card?: BoardCard
+  /** The id removed by a removal operation. */
+  removedId?: string
+}
+
 /** Input for creating a card. */
 export interface AddCardInput {
   title: string
@@ -323,35 +407,37 @@ function optionalText(target: Record<string, unknown>, field: 'description' | 's
 }
 
 /** Add one card and return the fresh board view. */
-export async function addCard(cwd: string, input: AddCardInput): Promise<BoardView> {
+export async function addCard(cwd: string, input: AddCardInput): Promise<BoardMutation> {
   const title = input.title.trim()
   if (title === '') throw new TypeError('kanban: card title must be a non-empty string')
   if (input.status !== undefined && !BOARD_STATUSES.includes(input.status)) {
     throw new TypeError(`kanban: invalid status ${JSON.stringify(input.status)}`)
   }
-  const board = await readBoard(cwd)
-  const now = Date.now()
-  const fields: Record<string, string> = {}
-  optionalText(fields, 'description', input.description)
-  optionalText(fields, 'summary', input.summary)
-  optionalText(fields, 'rationale', input.rationale)
-  optionalText(fields, 'rejected', input.rejected)
-  const card: BoardCard = {
-    id: `card-${randomUUID()}`,
-    title,
-    ...fields,
-    ...input.sourceSessionId !== undefined && input.sourceSessionId !== ''
-      ? { sourceSessionId: input.sourceSessionId }
-      : {},
-    status: input.status ?? 'todo',
-    tags: normalizeTags(input.tags),
-    createdAt: now,
-    updatedAt: now,
-  }
-  board.cards.push(card)
-  const archived = await archiveExcessDone(cwd, board)
-  await writeBoard(cwd, board)
-  return viewOf(cwd, board, archived)
+  return await withBoardLock(cwd, async () => {
+    const board = await readBoard(cwd)
+    const now = Date.now()
+    const fields: Record<string, string> = {}
+    optionalText(fields, 'description', input.description)
+    optionalText(fields, 'summary', input.summary)
+    optionalText(fields, 'rationale', input.rationale)
+    optionalText(fields, 'rejected', input.rejected)
+    const card: BoardCard = {
+      id: `card-${randomUUID()}`,
+      title,
+      ...fields,
+      ...input.sourceSessionId !== undefined && input.sourceSessionId !== ''
+        ? { sourceSessionId: input.sourceSessionId }
+        : {},
+      status: input.status ?? 'todo',
+      tags: normalizeTags(input.tags),
+      createdAt: now,
+      updatedAt: now,
+    }
+    board.cards.push(card)
+    const archived = await archiveExcessDone(cwd, board)
+    await writeBoard(cwd, board)
+    return { view: viewOf(cwd, board, archived), card }
+  })
 }
 
 /** Fields a caller may change on an existing card. */
@@ -366,7 +452,7 @@ export interface UpdateCardInput {
 }
 
 /** Update one card in place and return the fresh board view. */
-export async function updateCard(cwd: string, id: string, input: UpdateCardInput): Promise<BoardView> {
+export async function updateCard(cwd: string, id: string, input: UpdateCardInput): Promise<BoardMutation> {
   if (id === '' || id.trim() !== id) throw new TypeError('kanban: card id must be a non-empty, untrimmed string')
   if (input.title !== undefined && input.title.trim() === '') {
     throw new TypeError('kanban: card title must be a non-empty string')
@@ -379,46 +465,50 @@ export async function updateCard(cwd: string, id: string, input: UpdateCardInput
     && input.rejected === undefined && input.status === undefined && input.tags === undefined) {
     throw new TypeError('kanban: card update requires at least one field')
   }
-  const board = await readBoard(cwd)
-  const card = board.cards.find(candidate => candidate.id === id)
-  if (card === undefined) throw new Error(`kanban: no card with id ${JSON.stringify(id)}`)
-  if (input.title !== undefined) card.title = input.title.trim()
-  if (input.description !== undefined) {
-    const v = input.description.trim()
-    if (v === '') delete card.description
-    else card.description = v
-  }
-  if (input.summary !== undefined) {
-    const v = input.summary.trim()
-    if (v === '') delete card.summary
-    else card.summary = v
-  }
-  if (input.rationale !== undefined) {
-    const v = input.rationale.trim()
-    if (v === '') delete card.rationale
-    else card.rationale = v
-  }
-  if (input.rejected !== undefined) {
-    const v = input.rejected.trim()
-    if (v === '') delete card.rejected
-    else card.rejected = v
-  }
-  if (input.status !== undefined) card.status = input.status
-  if (input.tags !== undefined) card.tags = normalizeTags(input.tags)
-  card.updatedAt = Date.now()
-  const archived = await archiveExcessDone(cwd, board)
-  await writeBoard(cwd, board)
-  return viewOf(cwd, board, archived)
+  return await withBoardLock(cwd, async () => {
+    const board = await readBoard(cwd)
+    const card = board.cards.find(candidate => candidate.id === id)
+    if (card === undefined) throw new Error(`kanban: no card with id ${JSON.stringify(id)}`)
+    if (input.title !== undefined) card.title = input.title.trim()
+    if (input.description !== undefined) {
+      const v = input.description.trim()
+      if (v === '') delete card.description
+      else card.description = v
+    }
+    if (input.summary !== undefined) {
+      const v = input.summary.trim()
+      if (v === '') delete card.summary
+      else card.summary = v
+    }
+    if (input.rationale !== undefined) {
+      const v = input.rationale.trim()
+      if (v === '') delete card.rationale
+      else card.rationale = v
+    }
+    if (input.rejected !== undefined) {
+      const v = input.rejected.trim()
+      if (v === '') delete card.rejected
+      else card.rejected = v
+    }
+    if (input.status !== undefined) card.status = input.status
+    if (input.tags !== undefined) card.tags = normalizeTags(input.tags)
+    card.updatedAt = Date.now()
+    const archived = await archiveExcessDone(cwd, board)
+    await writeBoard(cwd, board)
+    return { view: viewOf(cwd, board, archived), card }
+  })
 }
 
 /** Remove one card and return the fresh board view. */
-export async function removeCard(cwd: string, id: string): Promise<BoardView> {
+export async function removeCard(cwd: string, id: string): Promise<BoardMutation> {
   if (id === '' || id.trim() !== id) throw new TypeError('kanban: card id must be a non-empty, untrimmed string')
-  const board = await readBoard(cwd)
-  const index = board.cards.findIndex(card => card.id === id)
-  if (index < 0) throw new Error(`kanban: no card with id ${JSON.stringify(id)}`)
-  board.cards.splice(index, 1)
-  const archived = await archiveExcessDone(cwd, board)
-  await writeBoard(cwd, board)
-  return viewOf(cwd, board, archived)
+  return await withBoardLock(cwd, async () => {
+    const board = await readBoard(cwd)
+    const index = board.cards.findIndex(card => card.id === id)
+    if (index < 0) throw new Error(`kanban: no card with id ${JSON.stringify(id)}`)
+    board.cards.splice(index, 1)
+    const archived = await archiveExcessDone(cwd, board)
+    await writeBoard(cwd, board)
+    return { view: viewOf(cwd, board, archived), removedId: id }
+  })
 }

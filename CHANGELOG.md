@@ -5,6 +5,35 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.11] - 2026-11-01
+
+### Changed
+
+- **Write operations return only the touched card.** `board_add` / `board_update` /
+  `board_remove` used to render the whole board on every write; on a mature
+  108-card board that cost ≈2.3k tokens per operation. Their output is now the
+  changed card (or the removed id) plus board counters. `board_list` remains the
+  full read path and gained `status` / `tag` / `limit` filters — its counters
+  still describe the whole board, never the filtered subset.
+- **Concurrent writers can no longer lose updates.** Every mutation now runs
+  under the advisory `KANBAN.json.lock` (created with `O_EXCL`): the
+  read → mutate → atomic-rename window is serialized across sessions and agents,
+  with a 5 s bounded wait that fails loudly instead of overwriting, and a 15 s
+  stale-lock takeover for crashed writers. The existing atomic tmp+rename write
+  is unchanged.
+- **Shared-board ownership rules in the guidance and skill.** Claim a card by
+  moving it to `in_progress` before starting; check `sourceSessionId` before
+  touching a card another session is working on; split rather than race. Done
+  summaries should cite verifiable coordinates (commit/PR id, command output,
+  artifact path) when they exist.
+
+### Tests
+
+- `board-core.spec.mjs`: 8 concurrent `board_add` calls all persist (lock beats
+  lost-update), and a failed mutation releases the lock.
+- `verify-tools.mjs` / `verify-spec.mjs` / `verify-context.mjs`: still execute the
+  board tools end-to-end through the shared tool-exec compatibility layer.
+
 ## [0.2.10] - 2026-09-25
 
 ### Changed

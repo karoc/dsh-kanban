@@ -28,6 +28,12 @@ without waiting to be asked:
 - As work progresses → the model `board_update`s cards to `in_progress` / `done`;
 - Switching branches or opening a new session → the model `board_list`s first to
   pick up the durable record;
+- Claiming shared work → the guidance says to move a card to `in_progress`
+  before starting it, check its `sourceSessionId` before touching another
+  session's card, and split rather than race when two sessions need the same
+  work;
+- Closing a shipped card → cite verifiable coordinates (commit/PR id, command
+  output, artifact path) in the summary when they exist;
 - Division of labor vs `todo_write`: `todo_write` is the transient in-turn task
   list; the board is the durable cross-session record — anything the user should
   still see after switching branches belongs on the board.
@@ -93,14 +99,14 @@ done cards (**beyond 100, oldest first**) are **archived** (moved to
 
 | Tool | Purpose |
 |---|---|
-| `board_list` | Read the current workspace board (all cards with status, tags, timestamps). Call it before any update to get real ids. |
-| `board_add` | Add a card (title + **rationale/why expected on every card** — a title-only card is incomplete and flagged 缺; rejected/gave-up when a decision was made; summary/what filled at completion; optional description, status, tags). |
-| `board_update` | Update a card by id (status / title / summary / rationale / rejected / description / tags). |
-| `board_remove` | Remove a card by id. |
+| `board_list` | Read the current workspace board (all cards with status, tags, timestamps). Optional `status` / `tag` / `limit` filters narrow the returned cards; counters always describe the whole board. Call it before any update to get real ids. |
+| `board_add` | Add a card (title + **rationale/why expected on every card** — a title-only card is incomplete and flagged 缺; rejected/gave-up when a decision was made; summary/what filled at completion; optional description, status, tags). Returns only the new card + counters. |
+| `board_update` | Update a card by id (status / title / summary / rationale / rejected / description / tags). Returns only the touched card + counters. |
+| `board_remove` | Remove a card by id. Returns the removed id + counters. |
 | `note_add` | Write an Agent Note (full replication of the DSH repo discipline) to `.agents/notes/implemented/<class>/<date>-<topic>.md`. |
 | `note_list` | List existing Agent Notes in the current workspace. |
 
-The board is scoped to the **current session's working directory (cwd)**: every session under the same project directory shares one `KANBAN.json` — that's what makes it survive across sessions and branches.
+The board is scoped to the **current session's working directory (cwd)**: every session under the same project directory shares one `KANBAN.json` — that's what makes it survive across sessions and branches. Because it is shared, every mutation runs under an advisory `KANBAN.json.lock` (O_EXCL, bounded 5 s wait, 15 s stale-lock takeover) on top of the atomic tmp+rename write: two sessions/agents cannot silently overwrite each other's read-modify-write.
 
 ### Editable Agent Note spec (reuse, not re-invention; synced via overrides)
 
