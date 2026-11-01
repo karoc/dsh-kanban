@@ -29,9 +29,8 @@ without waiting to be asked:
 - Switching branches or opening a new session → the model `board_list`s first to
   pick up the durable record;
 - Claiming shared work → the guidance says to move a card to `in_progress`
-  before starting it, check its `sourceSessionId` before touching another
-  session's card, and split rather than race when two sessions need the same
-  work;
+  before starting it, treat an `in_progress` card you did not claim as someone
+  else's work, and split rather than race when two sessions need the same work;
 - Closing a shipped card → cite verifiable coordinates (commit/PR id, command
   output, artifact path) in the summary when they exist;
 - Division of labor vs `todo_write`: `todo_write` is the transient in-turn task
@@ -99,14 +98,16 @@ done cards (**beyond 100, oldest first**) are **archived** (moved to
 
 | Tool | Purpose |
 |---|---|
-| `board_list` | Read the current workspace board (all cards with status, tags, timestamps). Optional `status` / `tag` / `limit` filters narrow the returned cards; counters always describe the whole board. Call it before any update to get real ids. |
+| `board_list` | Read the current workspace board. By default returns **open cards only**, each rendered with its **exact id**, status, tags and missing-field flags; `status` / `tag` / `includeDone` / `order` / `limit` narrow and order the view, `detail: true` adds the card bodies. Counters (and the archive count/path when present) always describe the whole board. Call it before `board_update` / `board_remove` to get real ids; `board_add` needs no prior read. |
 | `board_add` | Add a card (title + **rationale/why expected on every card** — a title-only card is incomplete and flagged 缺; rejected/gave-up when a decision was made; summary/what filled at completion; optional description, status, tags). Returns only the new card + counters. |
 | `board_update` | Update a card by id (status / title / summary / rationale / rejected / description / tags). Returns only the touched card + counters. |
 | `board_remove` | Remove a card by id. Returns the removed id + counters. |
 | `note_add` | Write an Agent Note (full replication of the DSH repo discipline) to `.agents/notes/implemented/<class>/<date>-<topic>.md`. |
 | `note_list` | List existing Agent Notes in the current workspace. |
 
-The board is scoped to the **current session's working directory (cwd)**: every session under the same project directory shares one `KANBAN.json` — that's what makes it survive across sessions and branches. Because it is shared, every mutation runs under an advisory `KANBAN.json.lock` (O_EXCL, bounded 5 s wait, 15 s stale-lock takeover) on top of the atomic tmp+rename write: two sessions/agents cannot silently overwrite each other's read-modify-write.
+The board is scoped to the **current session's working directory (cwd)**: every session under the same project directory shares one `KANBAN.json` — that's what makes it survive across sessions and branches. Because it is shared, every mutation runs under an advisory `KANBAN.json.lock` (O_EXCL; a 10 s bounded wait that fails loudly instead of overwriting; a same-host lock is only taken over once its recorded pid is gone, and release only removes the lock it owns) on top of the atomic tmp+rename write: two sessions/agents cannot silently overwrite each other's read-modify-write, and a crashed writer cannot wedge the board forever.
+
+The `/kanban/*` HTTP routes are **fenced by DSH's Connection trust check** (Host/Origin/browser auth): an untrusted request gets 401/403 before any filesystem work, the `cwd` must be an absolute existing directory (a route never creates one), and POST bodies must be `application/json`. The model tools are unaffected — they run inside the authenticated session.
 
 ### Editable Agent Note spec (reuse, not re-invention; synced via overrides)
 
@@ -263,7 +264,7 @@ Cards are the board's cross-session memory: the next session reads them **withou
   - on the **Web board page** (a warning line under the card fields — `missing: …` in the English UI, `缺字段：…` in Chinese — humans see it too).
 - **A `done` card must be self-explanatory**: `summary` (做了什么) + `rationale` + `rejected` (放弃了什么) all present, so the completed work is an honest hand-off.
 
-**The kanban-use skill** (`skills/kanban-use/SKILL.md`) is the deep manual for this discipline — field semantics, good/bad card examples, the create → advance → close flow, a close checklist, and templates. The system-prompt guidance points the model at it. **Delivery has two paths, and neither asks the user for an extra step.** **Preferred (DSH ≥ 0.1.6, i.e. `ctx.skills` exists)**: the host half registers the packaged `skills/kanban-use/SKILL.md` straight into the shell's skill registry (`ctx.skills.register`, `source: 'runtime'`), so the skill version IS the plugin version — there is no stale copy, and a frontmatter DSH cannot parse cannot silently hide it; by DSH's precedence (project > runtime > user) a copy in `~/.agents/skills` **cannot** shadow it, while a project-level `.agents/skills` (or `.dsh/skills`) copy still wins — the documented way to customize. **Fallback (an older shell, or a profile without the skill service)**: copy install — the skill ships inside the npm package (the tarball includes `skills/kanban-use/SKILL.md` and `scripts/install-skill.mjs`) and the host half checks `~/.agents/skills/kanban-use/SKILL.md` on every `dsh web` start. A `skill-version` fingerprint in the skill's frontmatter (bumped on content changes) drives that copy policy: missing → copies the shipped file in; identical → no-op; **same or newer version but different content → your local copy is kept** (that is your own edit of the current version) with a hint; **older version (or a copy with no fingerprint) → synced over** (that is stale package content from a previous install, the upgrade path). So `dsh plugin add/update dsh-kanban` + the required restart is all it takes, on any machine. The manual commands still exist for repo checkouts and forced syncs:
+**The kanban-use skill** (`skills/kanban-use/SKILL.md`) is the deep manual for this discipline — field semantics, good/bad card examples, the create → advance → close flow, a close checklist, and templates. The system-prompt guidance points the model at it. **Delivery has two paths, and neither asks the user for an extra step.** **Preferred (DSH ≥ 0.1.6, i.e. `ctx.skills` exists)**: the host half registers the packaged `skills/kanban-use/SKILL.md` straight into the shell's skill registry (`ctx.skills.register`, `source: 'runtime'`), so the shipped skill content and the plugin stay in lockstep — the separate `skill-version` fingerprint only drives the copy fallback, it is not the plugin version, and a frontmatter DSH cannot parse cannot silently hide it; by DSH's precedence (project > runtime > user) a copy in `~/.agents/skills` **cannot** shadow it, while a project-level `.agents/skills` (or `.dsh/skills`) copy still wins — the documented way to customize. **Fallback (an older shell, or a profile without the skill service)**: copy install — the skill ships inside the npm package (the tarball includes `skills/kanban-use/SKILL.md` and `scripts/install-skill.mjs`) and the host half checks `~/.agents/skills/kanban-use/SKILL.md` on every `dsh web` start. A `skill-version` fingerprint in the skill's frontmatter (bumped on content changes) drives that copy policy: missing → copies the shipped file in; identical → no-op; **same or newer version but different content → your local copy is kept** (that is your own edit of the current version) with a hint; **older version (or a copy with no fingerprint) → synced over** (that is stale package content from a previous install, the upgrade path). So `dsh plugin add/update dsh-kanban` + the required restart is all it takes, on any machine. The manual commands still exist for repo checkouts and forced syncs:
 
 ```sh
 pnpm install:skill            # symlinks skills/kanban-use → ~/.agents/skills/kanban-use
@@ -326,7 +327,7 @@ pnpm bundle    # emits lib/index.js + lib/client.js
 ## Verification
 
 ```sh
-pnpm test       # tsc --noEmit typecheck + 20 KANBAN.json domain unit tests
+pnpm test       # tsc --noEmit typecheck + 43 unit tests (board domain, workspace pick, note naming)
                 #   + 13 workspace-pick/current-session derivation tests
                 #   + token-drift gate (with negative control) + panel-wiring gate
                 #   + host tool smoke + skill runtime registration vs a real registry

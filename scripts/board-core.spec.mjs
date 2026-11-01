@@ -5,17 +5,20 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { hostname, tmpdir } from 'node:os'
 import { isAbsolute, join, sep } from 'node:path'
 import {
   addCard,
+  archivePath,
   boardPath,
+  withBoardLock,
   isBoardCard,
   isBoardData,
   readBoard,
   removeCard,
   renameWithRetry,
+  renderCardLine,
   updateCard,
 } from '../src/board-core.ts'
 
@@ -267,5 +270,54 @@ test('a failed mutation releases the board lock', async () => {
   await assert.rejects(() => updateCard(ws, 'card-missing', { status: 'done' }), /no card/)
   const added = await addCard(ws, { title: 'after failure' })
   assert.equal(added.view.cards.length, 1)
+  await rm(ws, { recursive: true, force: true })
+})
+
+test('renderCardLine carries the exact card id and missing-field flags', () => {
+  const line = renderCardLine({
+    id: 'card-abc', title: '标题', status: 'todo', tags: ['dsh'], createdAt: 1, updatedAt: 1,
+  })
+  assert.match(line, /card-abc/)
+  assert.match(line, /#dsh/)
+  assert.match(line, /缺:为什么/)
+})
+
+test('a crashed writer lock is taken over when its process is gone', async () => {
+  const ws = await freshWorkspace()
+  await writeFile(join(ws, 'KANBAN.json'), JSON.stringify({ version: 1, cards: [] }))
+  await writeFile(join(ws, 'KANBAN.json.lock'), JSON.stringify({
+    token: 'dead-token', pid: 999999, host: hostname(), acquiredAt: Date.now(),
+  }))
+  const mutation = await addCard(ws, { title: 'after crash' })
+  assert.equal(mutation.view.cards.length, 1)
+  await assert.rejects(() => stat(join(ws, 'KANBAN.json.lock')), /ENOENT/)
+  await rm(ws, { recursive: true, force: true })
+})
+
+test('release never deletes a lock it does not own', async () => {
+  const ws = await freshWorkspace()
+  await writeFile(join(ws, 'KANBAN.json'), JSON.stringify({ version: 1, cards: [] }))
+  const lock = join(ws, 'KANBAN.json.lock')
+  await withBoardLock(ws, async () => {
+    // Another writer replaced our lock while we held it.
+    await writeFile(lock, JSON.stringify({ token: 'foreign', pid: process.pid, host: hostname(), acquiredAt: Date.now() }))
+  })
+  const info = JSON.parse(await readFile(lock, 'utf8'))
+  assert.equal(info.token, 'foreign')
+  await rm(lock)
+  await rm(ws, { recursive: true, force: true })
+})
+
+test('an unrecognized archive document is never overwritten', async () => {
+  const ws = await freshWorkspace()
+  const cards = Array.from({ length: 101 }, (_, index) => ({
+    id: `card-${index}`, title: `done-${index}`, status: 'done', tags: [], createdAt: index, updatedAt: index,
+  }))
+  await writeFile(join(ws, 'KANBAN.json'), JSON.stringify({ version: 1, cards }))
+  await mkdir(join(ws, '.agents', 'notes'), { recursive: true })
+  const precious = { version: 1, cards: [{ title: 'PRECIOUS' }] }
+  await writeFile(archivePath(ws), JSON.stringify(precious))
+  await assert.rejects(() => addCard(ws, { title: 'new' }), /not a recognized/)
+  assert.deepEqual(JSON.parse(await readFile(archivePath(ws), 'utf8')), precious)
   await rm(ws, { recursive: true, force: true })
 })

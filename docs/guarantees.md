@@ -21,3 +21,11 @@ when a title disappears, so a guarantee cannot be quietly dropped.
 | G11 | 没有 staged 会话时（如全局面板打开）`currentSessionId` 为 **undefined**，不会误判工作区 | `currentSessionId is undefined with no staged session (global panel open)` |
 | G12 | 空的 legacy `current` 字段被**忽略**（不被当成 staged） | `currentSessionId ignores an empty legacy` |
 | G13 | 目标文件被短暂占用（Windows EPERM 竞态）时 `renameWithRetry` **重试成功**，不丢写入 | `renameWithRetry succeeds when the target is briefly held open (Windows EPERM race)` |
+| G14 | 同一进程/跨会话的并发写入被串行化，**不会丢失更新** | `concurrent addCard calls keep every card (board lock prevents lost updates)` |
+| G15 | 变更失败时锁被释放（不会留下永久占用） | `a failed mutation releases the board lock` |
+| G16 | 崩溃写者的锁在其进程结束后可被接管（不会永久卡死后续写入） | `a crashed writer lock is taken over when its process is gone` |
+| G17 | 释放锁只删除**自己持有**的锁（绝不删除他人的锁） | `release never deletes a lock it does not own` |
+| G18 | 结构无法识别的 archive 文档**绝不覆盖**（fail loud） | `an unrecognized archive document is never overwritten` |
+| G19 | 模型可见的卡片行**必须携带精确 id**（否则 board_update 不可调用） | `renderCardLine carries the exact card id and missing-field flags` |
+| G20 | 非 ASCII 主题的笔记文件名**不会互相碰撞** | `two non-ASCII topics that differ only in punctuation never collide` |
+| G21 | 纯标点主题也能得到基于哈希的唯一文件名 | `an all-punctuation topic still gets a hash-based name` |

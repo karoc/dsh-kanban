@@ -90,7 +90,8 @@ can. The workflow:
 3. **Publish (human)**:
    ```sh
    npm login     # interactive, 2FA
-   npm publish   # runs prepublishOnly (release gate + build), then postpublish
+   npm test      # full gate suite (typecheck, specs, verify-*, guarantees, negative controls)
+   npm publish   # runs prepublishOnly (npm test + release gate + build), then postpublish
    ```
 
 The gate is **automated and blocking**:

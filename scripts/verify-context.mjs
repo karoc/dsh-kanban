@@ -24,6 +24,13 @@ class FakeCommands extends Service {
   register() { return () => {} }
 }
 
+class FakeConnection extends Service {
+  constructor(ctx) { super(ctx, 'connection') }
+  requestRejection(req) {
+    return req.headers['x-test-untrusted'] !== undefined ? 403 : undefined
+  }
+}
+
 const ws = await mkdtemp(join(tmpdir(), 'kanban-ctx-'))
 const now = Date.now()
 // A workspace with 2 open + 1 done card.
@@ -42,6 +49,7 @@ await ctx.plugin(ToolRuntime, {})
 await installToolExecutor(ctx)
 await ctx.plugin(FakeWebServer)
 await ctx.plugin(FakeCommands)
+await ctx.plugin(FakeConnection)
 await ctx.plugin(kanban)
 await new Promise(r => setTimeout(r, 200))
 

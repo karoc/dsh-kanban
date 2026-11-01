@@ -5,6 +5,73 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.12] - 2026-11-01
+
+### Fixed
+
+- **The id contract is real again.** `board_list` / `board_add` / `board_update` /
+  `board_remove`, the `/kanban` command and the session-start snapshot now render
+  each card's **exact id**. 0.2.11 rendered title + tags only, so the documented
+  "board_list, then update by id" flow was unimplementable: real sessions had
+  **10.2% failed `board_update` calls** with fabricated ids and 153 shell reads of
+  `KANBAN.json` as a workaround. `board_list` now defaults to open cards
+  (todo + in_progress), takes `status` / `tag` / `includeDone` / `order` / `limit`,
+  and `detail: true` adds the card bodies (truncated per field); counters and the
+  archive count/path always describe the whole board. `board_add` no longer tells
+  the model to read the board first (it needs no prior state).
+- **`/kanban done` surfaces completeness debt**: closing a card that lacks
+  summary/rationale/rejected now prints exactly which fields are missing instead
+  of silently producing the incomplete done card the discipline forbids.
+- **`/kanban/*` routes are fenced by the host trust check.** Every handler calls
+  Connection's `requestRejection` (untrusted → 401/403) before any filesystem
+  work, POST bodies must be `application/json` (415), the `cwd` must be an
+  absolute *existing* directory (a route can no longer create arbitrary trees),
+  and the registrations run under `ctx.effect`. Previously `/` required auth but
+  `/kanban/*` was open to any local page/process (DNS-rebinding read included)
+  and accepted an arbitrary `cwd` for read **and write**.
+- **The write lock has ownership now.** Lock files carry a random token, pid and
+  host; release only removes the file this acquisition created, a same-host lock
+  is taken over only after its recorded pid is gone (a suspended/GC-paused live
+  holder is never stolen), takeover renames the candidate aside and verifies the
+  token before deleting it, and the wait/failure path is bounded (a persistent
+  stat failure can no longer spin forever). Crash recovery is immediate instead
+  of "first retry fails for 10 s". Same-ms temp-file names got a UUID suffix
+  (concurrent writes could collide on one tmp path).
+- **Notes cannot be silently clobbered.** `note_add` refuses an existing path
+  unless `supersede: true` is passed for the same decision; non-ASCII topics keep
+  readable letters + an 8-char hash suffix and use the local calendar day (21/108
+  real notes had been filed a day early); `note_list` reads the workspace's
+  effective classes (custom classes were invisible) and filters by class.
+- **The archive is validated before it is rewritten.** An unrecognized
+  `.agents/notes/archive.json` shape fails loud with its path instead of being
+  dropped; cards are de-duplicated by id so an archive-first crash cannot append
+  the same card twice.
+- **Jump-to-source-session** uses `uiWorkspace.openSession` — `ISessions.open`
+  never existed, so the button threw and left the user on the current chat.
+- Stale `dsh.client.inject` edges removed (7 packages the bundle never requires);
+  `check-client-wiring` now gates built-require ↔ inject parity, and the shipped
+  tarball includes `lib/client.js.map`.
+
+### Changed
+
+- `verify:all` requires every recorded step to pass, a clean tree, and
+  start == end HEAD; `--check-fresh` no longer blesses a failed or dirty run.
+  `prepublishOnly` runs the full test suite before the release gate + build, and
+  CONTRIBUTING lists `npm test` in the publish checklist.
+- Corrections to 0.2.11's notes: its write-render cost was measured at ~6–7k
+  tokens (not ~2.3k) on the 108-card board; its cross-session lock claim is now
+  actually covered (only in-process concurrency and a failed-release case were
+  tested before).
+
+### Tests
+
+- `board-core.spec`: 26 cases incl. 8 concurrent adds, dead-writer lock takeover,
+  foreign-lock release, unrecognized-archive refusal, and id-bearing render lines.
+- `note-files.spec`: ASCII/non-ASCII/punctuation topic names never collide.
+- `verify-tools`: render carries the persisted id, note overwrite refusal, and a
+  route-fence case (untrusted 403 before any filesystem work).
+- `docs/guarantees.md`: G14–G21 pin the new lock/archive/render/note guarantees.
+
 ## [0.2.11] - 2026-11-01
 
 ### Changed

@@ -1,6 +1,6 @@
 ---
 name: kanban-use
-skill-version: 4
+skill-version: 5
 description: "Use when creating, updating, or closing kanban board cards (board_list / board_add / board_update / board_remove), when the user states a multi-step plan or list of tasks that should outlive this turn, when resuming work in a workspace that has an open board, or when asked how the board should be used. Teaches the card-completeness discipline: every card carries why (rationale), rejected alternatives when a decision was made, and a done card is self-explanatory with all three what/why/rejected fields so the next session can pick the work up without asking."
 ---
 
@@ -81,8 +81,8 @@ description: "Use when creating, updating, or closing kanban board cards (board_
 
 - 开始做某步 → 移 `in_progress`（**认领**）；完成 → 移 `done`；被取代/废弃 → 移 `done`
   或 `board_remove`（说明原因写进 rejected 或 description，别无声删除）。
-- 看板由**所有会话/所有 agent 共享**：开工前先看 `sourceSessionId`，别覆盖另一个
-  会话正在 `in_progress` 的卡；同一件事两边都需要时，拆卡而不是抢同一张。
+- 看板由**所有会话/所有 agent 共享**：开工前先移 `in_progress` 认领；不是自己认领的
+  `in_progress` 卡视为他人在做，别覆盖；同一件事两边都需要时，拆卡而不是抢同一张。
 - 决策途中出现取舍（"决定不做 X，因为 Y"）→ 随时补进 `rejected`。
 - 一律先 `board_list` 拿真实 id 再 update；id 精确匹配，不要凭记忆。
 
@@ -112,8 +112,14 @@ description: "Use when creating, updating, or closing kanban board cards (board_
 
 - `board_add` / `board_update` / `board_remove` 只回**本次触碰的那张卡** + 计数，
   不再回显整块看板；需要全量时用 `board_list`。
-- `board_list` 支持 `status` / `tag` / `limit` 过滤；`counts` 始终统计**整块看板**
-  （不受过滤影响）。大看板先按 `status: "in_progress"` 取在手工作，再按需取 todo。
+- `board_list` **默认只返回未完成卡**，每行都带精确 id；`status` / `tag` /
+  `includeDone` / `order`（`updated` 按最近更新）/ `limit` 过滤，`detail: true`
+  附加 description/summary/rationale/rejected 正文（每段截断 400 字符）。
+  `counts` 与归档数量始终统计**整块看板**（不受过滤影响）。大看板先
+  `status: "in_progress"` 取在手工作，再按需取 todo；done 需要时显式
+  `status: "done"` 或 `includeDone: true`。
+- `/kanban` 命令的输出同样带 id（`/kanban done <id>` 可直接用）；`/kanban done`
+  在卡缺字段时会提示补齐，不会假装是一张可交接的 done 卡。
 
 ## 9. 与 Web 看板页的配合
 
@@ -121,7 +127,6 @@ description: "Use when creating, updating, or closing kanban board cards (board_
 - 缺字段的卡在页面上显示「缺字段：…」警告行 —— 用户侧也能看到不完整，
   所以别指望"没人看见"。
 - 人的 `/kanban` 命令输出同样带 `⚠️缺` 标注。
-- 想确认工作区卡片整体质量，可运行仓库脚本 `node scripts/audit-cards.mjs <workspace> --fail`。
 
 ## 10. 模板速查
 

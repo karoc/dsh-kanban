@@ -21,12 +21,10 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { undocumentedReleaseFailures } from './lib/release-post-state.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const reportPath = join(root, 'lib/verify-report.json')
-
-/** Failure items the release gate may report without failing this script. */
-const DOCUMENTED_RELEASE_ITEMS = [/already published/]
 
 const STEPS = [
   { id: 'syntax:release-check', command: 'node --check scripts/release-check.mjs' },
@@ -57,15 +55,33 @@ if (process.argv.includes('--check-fresh')) {
   }
   const report = JSON.parse(readFileSync(reportPath, 'utf8'))
   const current = head()
-  if (report.commit !== current) {
-    console.error(`❌ the verification report is STALE: it verified ${report.commit.slice(0, 7)} but HEAD is ${current.slice(0, 7)}`)
+  const failFresh = (message) => {
+    console.error(`❌ ${message}`)
     console.error('   re-run `npm run verify:all` and quote the new report — do not reuse the old conclusion.')
     process.exit(1)
   }
-  console.log(`✅ verification report is fresh for ${current.slice(0, 7)} (${report.ts})`)
+  if (report.commit !== current) {
+    failFresh(`the verification report is STALE: it verified ${report.commit.slice(0, 7)} but HEAD is ${current.slice(0, 7)}`)
+  }
+  if (report.startCommit !== undefined && report.startCommit !== report.commit) {
+    failFresh(`the verification report started on ${report.startCommit.slice(0, 7)} but finished on ${report.commit.slice(0, 7)}`)
+  }
+  if (!Array.isArray(report.steps) || report.steps.length === 0) {
+    failFresh('the verification report contains no steps')
+  }
+  const failedSteps = report.steps.filter(step => step.ok !== true)
+  if (failedSteps.length > 0) {
+    failFresh(`${failedSteps.length} step(s) failed in the recorded run: ${failedSteps.map(step => step.id).join(', ')}`)
+  }
+  const dirty = execSync('git status --porcelain', { cwd: root, encoding: 'utf8' }).trim()
+  if (dirty !== '') {
+    failFresh(`the working tree changed after verification:\n${dirty.split('\n').slice(0, 5).join('\n')}`)
+  }
+  console.log(`✅ verification report is fresh and all ${report.steps.length} steps passed on ${current.slice(0, 7)} (${report.ts})`)
   process.exit(0)
 }
 
+const startCommit = head()
 const steps = []
 let failed = 0
 for (const step of STEPS) {
@@ -80,7 +96,7 @@ for (const step of STEPS) {
   let ok = exit === 0
   if (!ok && step.documentedFailure === true) {
     const items = output.split('\n').filter((line) => /^   - /.test(line))
-    const undocumented = items.filter((line) => !DOCUMENTED_RELEASE_ITEMS.some((pattern) => pattern.test(line)))
+    const undocumented = undocumentedReleaseFailures(output)
     ok = items.length > 0 && undocumented.length === 0
     if (!ok) output += `\n(undocumented release-gate failures: ${undocumented.length})`
   }
@@ -91,7 +107,7 @@ for (const step of STEPS) {
 }
 
 mkdirSync(join(root, 'lib'), { recursive: true })
-const report = { ts: new Date().toISOString(), commit: head(), node: process.version, steps }
+const report = { ts: new Date().toISOString(), startCommit, commit: head(), node: process.version, steps }
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`)
 console.log(`\nreport: ${reportPath} (commit ${report.commit.slice(0, 7)}, ${report.ts})`)
 

@@ -26,8 +26,9 @@
  *   - registers a `/kanban` command for the human to view/maintain the board.
  */
 
+import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { mkdir, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join } from 'node:path'
 import { URL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
@@ -40,8 +41,10 @@ import type { GenericCallView } from '@deepseek-ai/dsh-tools'
 import {
   CARD_FIELD_LABELS,
   addCard,
+  archivePath,
   missingCardFields,
   readBoard,
+  renderCardLine,
   readBoardSync,
   removeCard,
   updateCard,
@@ -52,6 +55,7 @@ import {
 // Fallback skill delivery (copy into ~/.agents/skills) + the parser/paths the
 // verification scripts pin against the shipped SKILL.md.
 import { ensureSkillInstalled, skillSourceFile, skillTargetFile } from './skill-sync.ts'
+import { noteFileName } from './note-files.ts'
 // Runtime skill registration (preferred delivery path) + its exported parser,
 // which scripts/verify-skill-runtime.mjs pins against the shipped SKILL.md.
 import { registerSkillRuntime, parseSkillMarkdown, type ContextLike } from './skill-register.ts'
@@ -195,15 +199,6 @@ const BOARD_ARCHIVED_SCHEMA = {
   },
 } as const
 
-/** One card as a single render line (title, tags, missing-field flags). */
-function renderCardLine(card: BoardToolCard): string {
-  const missing = missingCardFields(card)
-  const mark = missing.length > 0
-    ? ` ⚠️缺:${missing.map(field => CARD_FIELD_LABELS[field]).join(',')}`
-    : ''
-  return `- [${card.status}] ${card.title}${card.tags.length > 0 ? ` ${card.tags.map(t => `#${t}`).join(' ')}` : ''}${mark}`
-}
-
 /** Full-board output: only board_list reads every card. */
 const BOARD_OUTPUT = {
   schema: {
@@ -216,18 +211,30 @@ const BOARD_OUTPUT = {
       archived: BOARD_ARCHIVED_SCHEMA,
     },
   } as const,
-  render: (_args: unknown, value: BoardToolValue) => {
+  render: (args: unknown, value: BoardToolValue) => {
     const incomplete = value.cards.filter(card => missingCardFields(card).length > 0).length
+    const detail = (args as { detail?: boolean } | undefined)?.detail === true
+    const bodyLines = (card: BoardToolCard): string[] => {
+      if (!detail) return []
+      const truncate = (text: string): string => text.length > 400 ? text.slice(0, 400) + '…' : text
+      return [
+        card.description === undefined ? '' : `  description: ${truncate(card.description)}`,
+        card.summary === undefined ? '' : `  summary: ${truncate(card.summary)}`,
+        card.rationale === undefined ? '' : `  rationale: ${truncate(card.rationale)}`,
+        card.rejected === undefined ? '' : `  rejected: ${truncate(card.rejected)}`,
+      ].filter(line => line !== '')
+    }
     return [
       {
         type: 'text' as const,
         text: [
           `Board at ${value.path}`,
-          ...value.cards.map(renderCardLine),
-          ...value.cards.length === 0 ? ['(no cards yet)'] : [],
+          ...value.cards.flatMap(card => [renderCardLine(card), ...bodyLines(card)]),
+          ...value.cards.length === 0 ? ['(no cards in this view)'] : [],
           ...incomplete > 0
             ? [`⚠️ ${incomplete} card(s) missing fields — fill the flagged 为什么 (why), and for done cards 做了什么 (what) + 放弃了什么 (rejected), when you can.`]
             : [],
+          `counts: todo=${value.counts.todo} in_progress=${value.counts.inProgress} done=${value.counts.done}`,
           ...value.archived !== undefined
             ? [`Archived ${value.archived.count} done card(s) to ${value.archived.path}`]
             : [],
@@ -313,8 +320,8 @@ const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) b
   + 'before.\n\n'
   + 'The board is shared by every session and agent working in this workspace: move a card to '
   + 'in_progress before you start it (claim it), and do not overwrite a card another session is '
-  + 'already working on — cards record sourceSessionId, so check it with board_list first. When two '
-  + 'sessions need the same work, split the card rather than racing on it.\n\n'
+  + 'already working on (board_list renders the card id and status; in_progress means someone owns it). '
+  + 'When two sessions need the same work, split the card rather than racing on it.\n\n'
   + 'Close the loop at the end of every work session: when the user\'s request is done or '
   + 'reaches a clear stopping point, update the board to reflect reality — move completed '
   + 'cards to done, add any new follow-up as a todo card, and make every done card '
@@ -338,7 +345,8 @@ const BOARD_GUIDANCE = 'You have a persistent kanban board (the board_* tools) b
   + 'in present tense with concrete names and negative guarantees (what is NOT done, '
   + 'boundaries, safety rules); Alternatives are real options that lost, each with why; '
   + 'Consequences records what the trade-off cost and bought. Keep it a few paragraphs, '
-  + 'not a full essay.'
+  + 'not a full essay. Never edit an existing note into a different decision: write a new note and '
+  + 'cross-link it; note_add refuses to overwrite unless you pass supersede:true for the same decision.'
 
 /**
  * Session-start board snapshot injected into every assembly (systemPrompt
@@ -360,8 +368,10 @@ function boardSnapshotText(context: { agent?: { session: { header: { cwd?: strin
   } catch {
     return ''
   }
-  const open = board.cards.filter(card => card.status === 'todo' || card.status === 'in_progress')
-  if (open.length === 0) return ''
+  const allOpen = board.cards.filter(card => card.status === 'todo' || card.status === 'in_progress')
+  if (allOpen.length === 0) return ''
+  const MAX_SNAPSHOT_OPEN = 40
+  const open = allOpen.slice(0, MAX_SNAPSHOT_OPEN)
   const lines = open.map(card => {
     const tags = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''
     const status = card.status === 'in_progress' ? ' (in progress)' : ''
@@ -369,13 +379,16 @@ function boardSnapshotText(context: { agent?: { session: { header: { cwd?: strin
     const missingNote = missing.length > 0
       ? ` (缺:${missing.map(field => CARD_FIELD_LABELS[field]).join(',')})`
       : ''
-    return `- [${card.status}] ${card.title}${status}${tags}${missingNote}`
+    return `- [${card.status}] ${card.id} ${card.title}${status}${tags}${missingNote}`
   })
   const incomplete = open.filter(card => missingCardFields(card).length > 0).length
   const tail = incomplete > 0
     ? ['', `${incomplete} open card(s) are missing fields (缺) — fill the flagged 为什么 (and other fields) when you pick the work up.`]
     : []
-  return literalPromptText('Current workspace board (KANBAN.json) — open items:\n' + [...lines, ...tail].join('\n'))
+  const overflow = allOpen.length > open.length
+    ? ['', `… +${allOpen.length - open.length} more open card(s) not shown — use board_list.`]
+    : []
+  return literalPromptText('Current workspace board (KANBAN.json) — open items:\n' + [...lines, ...tail, ...overflow].join('\n'))
 }
 
 /**
@@ -408,8 +421,12 @@ async function executeBoardCommand(ctx: Context, invocation: CommandInvocation):
   const input = invocation.rawInput.trim()
   const done = async (id: string): Promise<CommandResult> => {
     try {
-      const { view } = await updateCard(cwd, id, { status: 'done' })
-      return renderBoardResult('Marked done.', view)
+      const { view, card } = await updateCard(cwd, id, { status: 'done' })
+      const missing = card === undefined ? [] : missingCardFields(card)
+      const warning = missing.length === 0
+        ? ''
+        : `\n⚠️ 这张卡还缺 ${missing.map(field => CARD_FIELD_LABELS[field]).join(',')} —— 用 board_update 补齐后才能算可交接的 done。`
+      return renderBoardResult('Marked done.' + warning, view)
     } catch (error) {
       return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
     }
@@ -446,13 +463,7 @@ function renderBoardResult(heading: string | undefined, view: BoardView): Comman
   const lines = [
     ...heading !== undefined ? [heading] : [],
     `Board at ${view.path}`,
-    ...view.cards.map(card => {
-      const missing = missingCardFields(card)
-      const mark = missing.length > 0
-        ? ` ⚠️缺:${missing.map(field => CARD_FIELD_LABELS[field]).join(',')}`
-        : ''
-      return `- [${card.status}] ${card.title}${card.tags.length > 0 ? ` ${card.tags.map(t => `#${t}`).join(' ')}` : ''}${mark}`
-    }),
+    ...view.cards.map(card => renderCardLine(card)),
     ...view.cards.length === 0 ? ['(no cards yet)'] : [],
   ]
   return { kind: 'success', text: lines.join('\n') }
@@ -477,15 +488,6 @@ function registerBoardCommand(ctx: Context): void {
  */
 export const NOTE_CLASSES = DEFAULT_NOTE_CLASSES
 export type NoteClass = (typeof NOTE_CLASSES)[number]
-
-/** Canonical note file name: <yyyy-mm-dd>-<kebab-topic>.md */
-function noteFileName(topic: string): string {
-  const kebab = topic.trim().toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  const today = new Date().toISOString().slice(0, 10)
-  return `${today}-${kebab === '' ? 'note' : kebab}.md`
-}
 
 /** Resolve a note path under the workspace. */
 function notePath(cwd: string, noteClass: NoteClass, topic: string): string {
@@ -524,7 +526,7 @@ async function writeAgentNote(cwd: string, noteClass: NoteClass, topic: string, 
   decision: string
   alternatives?: string
   consequences?: string
-}): Promise<string> {
+}, supersede = false): Promise<string> {
   const spec = await effectiveNoteSpec(cwd)
   if (noteClass !== undefined && !spec.noteClasses.includes(noteClass)) {
     throw new TypeError(`kanban: note class ${JSON.stringify(noteClass)} is not in the effective note classes (${spec.noteClasses.join(', ')})`)
@@ -534,6 +536,16 @@ async function writeAgentNote(cwd: string, noteClass: NoteClass, topic: string, 
   if (title === '') throw new TypeError('kanban: note topic must be a non-empty string')
   if (body.problem.trim() === '' || body.decision.trim() === '') {
     throw new TypeError('kanban: note requires a problem and a decision')
+  }
+  let exists = false
+  try {
+    await stat(path)
+    exists = true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+  if (exists && !supersede) {
+    throw new Error(`kanban: note already exists at ${path}; pass supersede:true only when superseding that decision (never edit an existing note into a different one)`)
   }
   const content = renderNoteBody(spec, title, body) + '\n'
   await mkdir(join(path, '..'), { recursive: true })
@@ -564,11 +576,13 @@ const NOTE_OUTPUT = {
 }
 
 /** List existing Agent Notes under the workspace, grouped by class. */
-async function listAgentNotes(cwd: string): Promise<string[]> {
+async function listAgentNotes(cwd: string, onlyClass?: string): Promise<string[]> {
   if (!isAbsolute(cwd)) throw new TypeError(`kanban: workspace must be an absolute path, got ${JSON.stringify(cwd)}`)
   const root = join(cwd, '.agents', 'notes', 'implemented')
+  const spec = await effectiveNoteSpec(cwd)
+  const classes = onlyClass === undefined ? spec.noteClasses : spec.noteClasses.filter(name => name === onlyClass)
   const found: string[] = []
-  for (const noteClass of NOTE_CLASSES) {
+  for (const noteClass of classes) {
     try {
       const entries = await readdir(join(root, noteClass))
       for (const entry of entries) {
@@ -612,38 +626,76 @@ export function apply(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: 'board_list',
-    description: 'Read the current workspace kanban board. Call this before board_add / board_update / board_remove so '
-      + 'you operate on real ids and current state. Optional filters narrow the returned cards; counts always describe '
-      + 'the whole board. The board is persisted to KANBAN.json at the workspace root and survives across sessions and branches.',
+    description: 'Read the current workspace kanban board. Call this before board_update / board_remove (board_add needs no prior state) '
+      + 'so you operate on real ids and current state. By default returns only open cards (todo + in_progress) and renders '
+      + 'each card with its exact id; pass status to filter or includeDone:true for the full board, detail:true to include '
+      + 'the card bodies (description/summary/rationale/rejected). Counts always describe the whole board. The board is '
+      + 'persisted to KANBAN.json at the workspace root and survives across sessions and branches.',
     parameters: {
       status: {
         type: 'string',
         enum: STATUSES,
-        description: 'Only return cards in this status.',
+        description: 'Only return cards in this status (explicitly passing done returns done cards).',
       },
       tag: {
         type: 'string',
         description: 'Only return cards carrying this tag (without the leading "#").',
       },
+      includeDone: {
+        type: 'boolean',
+        description: 'Include done cards (default false: only open items are returned).',
+      },
+      detail: {
+        type: 'boolean',
+        description: 'Also render the card bodies (description, summary, rationale, rejected), truncated per field.',
+      },
+      order: {
+        type: 'string',
+        enum: ['created', 'updated'],
+        description: 'Sort order over the filtered cards (default created = insertion order).',
+      },
       limit: {
         type: 'integer',
-        description: 'Return at most this many cards after filtering.',
+        description: 'Return at most this many cards after filtering (positive integer).',
       },
     },
     output: BOARD_OUTPUT,
     execute(args, exec) {
       const cwd = workspaceOf(exec.agent?.session.header.cwd)
-      return readBoard(cwd).then(board => {
+      return readBoard(cwd).then(async board => {
         const counts = {
           todo: board.cards.filter(c => c.status === 'todo').length,
           inProgress: board.cards.filter(c => c.status === 'in_progress').length,
           done: board.cards.filter(c => c.status === 'done').length,
         }
         let cards = board.cards
-        if (args.status !== undefined) cards = cards.filter(card => card.status === args.status)
+        const statusFilter = args.status
+        if (statusFilter !== undefined) cards = cards.filter(card => card.status === statusFilter)
+        else if (args.includeDone !== true) cards = cards.filter(card => card.status !== 'done')
         if (args.tag !== undefined) cards = cards.filter(card => card.tags.includes(args.tag as string))
-        if (args.limit !== undefined) cards = cards.slice(0, args.limit)
-        return { path: `${cwd}/KANBAN.json`, cards: cards.map(toToolCard), counts }
+        if (args.order === 'updated') cards = [...cards].sort((a, b) => b.updatedAt - a.updatedAt)
+        if (args.limit !== undefined) {
+          if (!Number.isInteger(args.limit) || args.limit < 1) {
+            throw new TypeError('kanban: limit must be a positive integer')
+          }
+          cards = cards.slice(0, args.limit)
+        }
+        let archived: { count: number; path: string } | undefined
+        try {
+          const parsed = JSON.parse(await readFile(archivePath(cwd), 'utf8')) as { archived?: unknown }
+          if (Array.isArray(parsed.archived)) archived = { count: parsed.archived.length, path: archivePath(cwd) }
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            // A broken archive must not break reading the live board; the
+            // mutation path fails loud on it.
+          }
+        }
+        return {
+          path: `${cwd}/KANBAN.json`,
+          cards: cards.map(toToolCard),
+          counts,
+          ...archived === undefined ? {} : { archived },
+        }
       })
     },
     presentCall: () => present('Read kanban board', 'read'),
@@ -820,6 +872,10 @@ export function apply(ctx: Context): void {
         type: 'string',
         description: 'What the trade-off cost AND bought: side effects, follow-up obligations, named coverage gaps.',
       },
+      supersede: {
+        type: 'boolean',
+        description: 'Overwrite an existing note at the same path. Only pass true when superseding that decision; never use it to edit an existing note into a different decision (write a new note and cross-link instead).',
+      },
     },
     output: NOTE_OUTPUT,
     execute(args, exec) {
@@ -829,7 +885,7 @@ export function apply(ctx: Context): void {
         decision: args.decision,
         ...args.alternatives === undefined ? {} : { alternatives: args.alternatives },
         ...args.consequences === undefined ? {} : { consequences: args.consequences },
-      }).then(path => ({ path, noteClass: args.class, topic: args.topic }))
+      }, args.supersede === true).then(path => ({ path, noteClass: args.class, topic: args.topic }))
     },
     presentCall: args => present('Write Agent Note', 'other', (args as { topic: string }).topic),
   }))
@@ -838,7 +894,12 @@ export function apply(ctx: Context): void {
     name: 'note_list',
     description: 'List existing Agent Notes under the current workspace (.agents/notes/implemented/**). '
       + 'Use it before note_add to avoid duplicating a note that already covers the decision.',
-    parameters: {},
+    parameters: {
+      class: {
+        type: 'string',
+        description: 'Only list notes of this class (must be one of the workspace effective note classes).',
+      },
+    },
     output: {
       schema: {
         type: 'object',
@@ -856,14 +917,16 @@ export function apply(ctx: Context): void {
         },
       ],
     },
-    execute(_args, exec) {
+    execute(args, exec) {
       const cwd = workspaceOf(exec.agent?.session.header.cwd)
-      return listAgentNotes(cwd).then(notes => ({ notes }))
+      return listAgentNotes(cwd, args.class).then(notes => ({ notes }))
     },
     presentCall: () => present('List Agent Notes', 'read'),
   }))
 
-  registerWebApi(ctx)
+  // Routes are registered only in compositions that mount BOTH the web server
+  // and the Connection trust service: an unfenced route must never exist.
+  ctx.inject(['webServer', 'connection'], scope => registerWebApi(scope))
 }
 
 // ── Web API route (the board page's read/write channel) ────────────────────
@@ -907,6 +970,12 @@ async function applyMutation(cwd: string, body: {
   status?: BoardStatus
   tags?: string[]
 }): Promise<BoardView> {
+  if (body.tags !== undefined && (!Array.isArray(body.tags) || body.tags.some(tag => typeof tag !== 'string'))) {
+    throw new TypeError('kanban: tags must be an array of strings')
+  }
+  if (body.status !== undefined && !STATUSES.includes(body.status)) {
+    throw new TypeError(`kanban: invalid status ${JSON.stringify(body.status)}`)
+  }
   switch (body.op) {
     case 'add':
       return (await addCard(cwd, {
@@ -960,6 +1029,78 @@ async function viewOf(cwd: string): Promise<BoardView> {
   }
 }
 
+/** Structural view of the host Connection service's trust check. */
+interface RouteConnectionTrust {
+  requestRejection(request: IncomingMessage): number | undefined
+}
+
+/** Resolve the host connection service; undefined in compositions without it. */
+function connectionTrustOf(ctx: Context): RouteConnectionTrust | undefined {
+  return Reflect.get(ctx, 'connection') as RouteConnectionTrust | undefined
+}
+
+/**
+ * Reject a request the deployment's Host/Origin/browser-auth checks do not
+ * trust. Routes registered on `webServer` bypass the page authentication
+ * unless they ask Connection, so every /kanban/* handler calls this first.
+ * @param ctx - plugin context.
+ * @param req - incoming request.
+ * @param res - response to end when rejected.
+ * @returns true when the request was rejected and the handler must stop.
+ */
+function rejectUntrusted(ctx: Context, req: IncomingMessage, res: ServerResponse): boolean {
+  const connection = connectionTrustOf(ctx)
+  if (connection === undefined) {
+    sendJson(res, 503, { ok: false, error: 'kanban: connection service unavailable; refusing unverified requests' })
+    return true
+  }
+  const rejection = connection.requestRejection(req)
+  if (rejection === undefined) return false
+  res.statusCode = rejection
+  res.end()
+  return true
+}
+
+/** Require `application/json` on mutating routes (blocks cross-site form posts). */
+function requireJsonContentType(req: IncomingMessage, res: ServerResponse): boolean {
+  const contentType = req.headers['content-type'] ?? ''
+  if (/^application\/json\b/i.test(contentType)) return false
+  sendJson(res, 415, { ok: false, error: 'kanban: content-type must be application/json' })
+  return true
+}
+
+/** Parse and validate a route workspace path; responds 400 and returns undefined. */
+function routeWorkspace(value: string | null | undefined, res: ServerResponse, field: string): string | undefined {
+  if (value === null || value === undefined || value === '') {
+    sendJson(res, 400, { ok: false, error: `kanban: ${field} requires a cwd` })
+    return undefined
+  }
+  if (!isAbsolute(value) || value.includes('\u0000')) {
+    sendJson(res, 400, { ok: false, error: 'kanban: cwd must be an absolute path' })
+    return undefined
+  }
+  return value
+}
+
+/** Require the workspace to exist already; a route never creates directories. */
+async function requireExistingWorkspace(cwd: string, res: ServerResponse): Promise<boolean> {
+  try {
+    const info = await stat(cwd)
+    if (info.isDirectory()) return true
+  } catch {
+    // Fall through to the uniform 400.
+  }
+  sendJson(res, 400, { ok: false, error: `kanban: workspace does not exist (${cwd})` })
+  return false
+}
+
+/** Map a handler error to its response (payload limits get 413, not 500). */
+function sendRouteError(res: ServerResponse, error: unknown): void {
+  if (res.writableEnded) return
+  const message = error instanceof Error ? error.message : String(error)
+  sendJson(res, /too large/i.test(message) ? 413 : 500, { ok: false, error: message })
+}
+
 /** Register GET/POST /kanban/api — the Web board page's data channel. */
 function registerWebApi(ctx: Context): void {
   const server = ctx.get('webServer') as
@@ -967,61 +1108,44 @@ function registerWebApi(ctx: Context): void {
     | undefined
   if (server === undefined) return
 
-  server.register({
+  ctx.effect(() => server.register({
     kind: 'prefix',
     path: '/kanban/api',
     handler: (req, res) => {
-      void handle(req, res).catch(error => {
-        if (!res.writableEnded) {
-          sendJson(res, 500, {
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-      })
+      if (rejectUntrusted(ctx, req, res)) return
+      void handle(req, res).catch(error => sendRouteError(res, error))
     },
-  })
+  }), 'kanban: /kanban/api')
 
   // Spec read/write: the Web page's "Agent Note spec" settings inputs.
-  server.register({
+  ctx.effect(() => server.register({
     kind: 'prefix',
     path: '/kanban/spec',
     handler: (req, res) => {
-      void handleSpec(req, res).catch(error => {
-        if (!res.writableEnded) {
-          sendJson(res, 500, {
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-      })
+      if (rejectUntrusted(ctx, req, res)) return
+      void handleSpec(req, res).catch(error => sendRouteError(res, error))
     },
-  })
+  }), 'kanban: /kanban/spec')
 
   // Lightweight open-item count: drives the sidebar badge (polled by the
   // client). Returns just the counts, not the whole board.
-  server.register({
+  ctx.effect(() => server.register({
     kind: 'prefix',
     path: '/kanban/counts',
     handler: (req, res) => {
-      void handleCounts(req, res).catch(error => {
-        if (!res.writableEnded) {
-          sendJson(res, 500, {
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-      })
+      if (rejectUntrusted(ctx, req, res)) return
+      void handleCounts(req, res).catch(error => sendRouteError(res, error))
     },
-  })
+  }), 'kanban: /kanban/counts')
 
   async function handleCounts(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const url = new URL(req.url ?? '/', 'http://localhost')
-    const cwd = url.searchParams.get('cwd')
-    if (cwd === null || cwd === '') {
-      sendJson(res, 400, { ok: false, error: 'kanban: GET /kanban/counts requires a cwd query parameter' })
+    if ((req.method ?? 'GET') !== 'GET') {
+      sendJson(res, 405, { ok: false, error: `kanban: method ${req.method ?? ''} not allowed` })
       return
     }
+    const url = new URL(req.url ?? '/', 'http://localhost')
+    const cwd = routeWorkspace(url.searchParams.get('cwd'), res, 'GET /kanban/counts')
+    if (cwd === undefined || !await requireExistingWorkspace(cwd, res)) return
     const board = await readBoard(cwd)
     const open = board.cards.filter(card => card.status === 'todo' || card.status === 'in_progress').length
     sendJson(res, 200, { ok: true, open, cwd })
@@ -1031,11 +1155,8 @@ function registerWebApi(ctx: Context): void {
     const method = req.method ?? 'GET'
     if (method === 'GET') {
       const url = new URL(req.url ?? '/', 'http://localhost')
-      const cwd = url.searchParams.get('cwd')
-      if (cwd === null || cwd === '') {
-        sendJson(res, 400, { ok: false, error: 'kanban: GET /kanban/spec requires a cwd query parameter' })
-        return
-      }
+      const cwd = routeWorkspace(url.searchParams.get('cwd'), res, 'GET /kanban/spec')
+      if (cwd === undefined || !await requireExistingWorkspace(cwd, res)) return
       const spec = await effectiveNoteSpec(cwd)
       sendJson(res, 200, {
         ok: true,
@@ -1050,6 +1171,7 @@ function registerWebApi(ctx: Context): void {
       return
     }
     if (method === 'POST') {
+      if (requireJsonContentType(req, res)) return
       const raw = await readBody(req)
       let body: {
         cwd?: string
@@ -1064,18 +1186,16 @@ function registerWebApi(ctx: Context): void {
         sendJson(res, 400, { ok: false, error: `kanban: invalid JSON body: ${(error as Error).message}` })
         return
       }
-      if (typeof body.cwd !== 'string' || body.cwd === '') {
-        sendJson(res, 400, { ok: false, error: 'kanban: POST /kanban/spec requires body.cwd' })
-        return
-      }
+      const cwd = routeWorkspace(body.cwd, res, 'POST /kanban/spec')
+      if (cwd === undefined || !await requireExistingWorkspace(cwd, res)) return
       const overrides: NoteSpecOverrides = {
         ...body.noteClasses !== undefined ? { noteClasses: body.noteClasses } : {},
         ...body.noteFormat !== undefined ? { noteFormat: body.noteFormat } : {},
         ...body.nonTrivialDefinition !== undefined ? { nonTrivialDefinition: body.nonTrivialDefinition } : {},
         ...body.acknowledgeSpecVersion !== undefined ? { specVersion: body.acknowledgeSpecVersion } : {},
       }
-      await writeNoteOverrides(body.cwd, overrides)
-      const spec = await effectiveNoteSpec(body.cwd)
+      await writeNoteOverrides(cwd, overrides)
+      const spec = await effectiveNoteSpec(cwd)
       sendJson(res, 200, {
         ok: true,
         specVersion: spec.specVersion,
@@ -1084,7 +1204,7 @@ function registerWebApi(ctx: Context): void {
         noteFormat: spec.noteFormat,
         nonTrivialDefinition: spec.nonTrivialDefinition,
         hasOverrides: spec.hasOverrides,
-        overridesPath: noteOverridesPath(body.cwd),
+        overridesPath: noteOverridesPath(cwd),
       })
       return
     }
@@ -1095,15 +1215,13 @@ function registerWebApi(ctx: Context): void {
     const method = req.method ?? 'GET'
     if (method === 'GET') {
       const url = new URL(req.url ?? '/', 'http://localhost')
-      const cwd = url.searchParams.get('cwd')
-      if (cwd === null || cwd === '') {
-        sendJson(res, 400, { ok: false, error: 'kanban: GET /kanban/api requires a cwd query parameter' })
-        return
-      }
+      const cwd = routeWorkspace(url.searchParams.get('cwd'), res, 'GET /kanban/api')
+      if (cwd === undefined || !await requireExistingWorkspace(cwd, res)) return
       sendJson(res, 200, { ok: true, ...await viewOf(cwd) })
       return
     }
     if (method === 'POST') {
+      if (requireJsonContentType(req, res)) return
       const raw = await readBody(req)
       let body: {
         cwd?: string
@@ -1123,12 +1241,10 @@ function registerWebApi(ctx: Context): void {
         sendJson(res, 400, { ok: false, error: `kanban: invalid JSON body: ${(error as Error).message}` })
         return
       }
-      if (typeof body.cwd !== 'string' || body.cwd === '') {
-        sendJson(res, 400, { ok: false, error: 'kanban: POST /kanban/api requires body.cwd' })
-        return
-      }
+      const cwd = routeWorkspace(body.cwd, res, 'POST /kanban/api')
+      if (cwd === undefined || !await requireExistingWorkspace(cwd, res)) return
       try {
-        const view = await applyMutation(body.cwd, body)
+        const view = await applyMutation(cwd, body)
         sendJson(res, 200, { ok: true, ...view })
       } catch (error) {
         sendJson(res, 400, { ok: false, error: error instanceof Error ? error.message : String(error) })

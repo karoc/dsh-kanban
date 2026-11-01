@@ -57,7 +57,7 @@
 
 | 工具 | 作用 |
 |---|---|
-| `board_list` | 读取当前工作区的看板（全部卡片 + 状态 + 标签 + 时间戳）。任何更新前先读它拿真实 id。 |
+| `board_list` | 读取当前工作区的看板。默认只返回**未完成卡**，每张卡都带**精确 id**、状态、标签与缺字段标记；`status` / `tag` / `includeDone` / `order` / `limit` 过滤与排序，`detail: true` 附带卡片正文。计数（以及存在时的归档数量/路径）始终描述整块看板。`board_update` / `board_remove` 前先读它拿真实 id；`board_add` 不需要先读。 |
 | `board_add` | 新增一张卡片（title + **rationale/为什么 每张卡都应写**——只有标题是不完整卡，会被标注 ⚠️缺；有取舍决策时写 rejected/放弃了什么；summary/做了什么 完成时写；可带 description、status、tags）。 |
 | `board_update` | 更新卡片（按 id，可改 status / title / summary / rationale / rejected / description / tags）。 |
 | `board_remove` | 删除卡片（按 id）。 |
@@ -189,7 +189,7 @@ dsh plugin --profile web remove dsh-kanban   # 同时移除依赖和 bundle 层�
 
 **kanban-use 技能**（`skills/kanban-use/SKILL.md`）是这套纪律的深度手册——字段语义、好/坏卡片对比、创建 → 推进 → 收尾全流程、关闭检查清单与模板。系统提示引导会把模型指向它。**技能的投递分两条路**：
 
-- **首选（DSH ≥ 0.1.6，`ctx.skills` 存在）**：host 半区把包内 `skills/kanban-use/SKILL.md` 直接注册进 shell 的技能注册表（`ctx.skills.register`，`source: 'runtime'`）。技能版本 = 插件版本，不存在"旧副本"，也不会因为磁盘上某份 frontmatter 坏掉而静默消失；按 DSH 的优先级（项目 > runtime > 用户），`~/.agents/skills` 里的旧副本**不会**盖住它，而工作区里的 `.agents/skills`（或 `.dsh/skills`）副本仍然优先——这就是自定义覆盖的官方方式。
+- **首选（DSH ≥ 0.1.6，`ctx.skills` 存在）**：host 半区把包内 `skills/kanban-use/SKILL.md` 直接注册进 shell 的技能注册表（`ctx.skills.register`，`source: 'runtime'`）。技能内容随插件同版本分发、不存在"旧副本"（`skill-version` 指纹只驱动复制兜底，不是插件版本号），也不会因为磁盘上某份 frontmatter 坏掉而静默消失；按 DSH 的优先级（项目 > runtime > 用户），`~/.agents/skills` 里的旧副本**不会**盖住它，而工作区里的 `.agents/skills`（或 `.dsh/skills`）副本仍然优先——这就是自定义覆盖的官方方式。
 - **兜底（旧 shell，或 profile 没有技能服务）**：退回复制安装——技能随 npm 包分发（tarball 内含 `skills/kanban-use/SKILL.md` 与 `scripts/install-skill.mjs`），启动时检查 `~/.agents/skills/kanban-use/SKILL.md`，由 frontmatter 里的 `skill-version` 指纹驱动：缺失 → 复制；一致 → 不动；**同版本或更新版本但内容不同 → 保留你的本地版本**并提示；**更旧版本（或无指纹的旧副本）→ 覆盖同步**。
 
 两条路都不需要用户做额外操作：「`dsh plugin add/update dsh-kanban` + 必需的重启」就够了。手动命令仍保留（仓库开发 / 强制同步）：
@@ -255,7 +255,7 @@ pnpm bundle    # 产出 lib/index.js + lib/client.js
 ## 验证
 
 ```sh
-pnpm test       # tsc --noEmit 类型检查 + 20 个 KANBAN.json 领域单测
+pnpm test       # tsc --noEmit 类型检查 + 43 个单测（看板领域 / 工作区选择 / 笔记命名）
                 #   + 13 个 workspace-pick / 当前会话推导单测
                 #   + 令牌漂移门禁（自带负向对照）+ 面板连线门禁
                 #   + Host 工具冒烟 + 技能 runtime 注册（对真实 registry）

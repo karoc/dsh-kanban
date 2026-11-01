@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 24
       - name: Run board-core unit tests
-        run: node --test scripts/board-core.spec.mjs
+        run: node --test scripts/board-core.spec.mjs scripts/workspace-pick.spec.mjs scripts/note-files.spec.mjs
 
   # Full gate on Linux: build the plugin bundle, then run the self-contained
   # discipline audits. NOTE: the repo's other check scripts are intentionally

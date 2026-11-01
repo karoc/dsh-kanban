@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const MIN_ROWS = 10
+const MIN_ROWS = 21
 
 let guarantees
 try {

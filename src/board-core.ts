@@ -11,8 +11,9 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { closeSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { closeSync, openSync, readFileSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { hostname } from 'node:os'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { dirname, isAbsolute, join } from 'node:path'
 
@@ -91,6 +92,22 @@ export function isBoardCard(value: unknown): value is BoardCard {
   if (card.rationale !== undefined && typeof card.rationale !== 'string') return false
   if (card.rejected !== undefined && typeof card.rejected !== 'string') return false
   return card.sourceSessionId === undefined || typeof card.sourceSessionId === 'string'
+}
+
+/**
+ * One card as a single model-visible render line. The id must lead the line:
+ * `output.render` is the only content a tool result exposes to the model, so an
+ * id present only in the canonical value is unreachable (board_update would be
+ * uncallable without shelling out to read KANBAN.json).
+ * @param card - the card to render.
+ * @returns the line, with tags and missing-field flags.
+ */
+export function renderCardLine(card: BoardCard): string {
+  const missing = missingCardFields(card)
+  const mark = missing.length > 0
+    ? ` ⚠️缺:${missing.map(field => CARD_FIELD_LABELS[field]).join(',')}`
+    : ''
+  return `- [${card.status}] ${card.id} ${card.title}${card.tags.length > 0 ? ` ${card.tags.map(tag => `#${tag}`).join(' ')}` : ''}${mark}`
 }
 
 /** The three Agent-Note-style what/why/rejected fields of a card. */
@@ -190,7 +207,7 @@ export function readBoardSync(cwd: string): BoardData {
 async function writeBoard(cwd: string, board: BoardData): Promise<void> {
   const path = boardPath(cwd)
   await mkdir(dirname(path), { recursive: true })
-  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
+  const tmp = `${path}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`
   await writeFile(tmp, JSON.stringify(board, null, 2) + '\n', 'utf8')
   await renameWithRetry(tmp, path)
 }
@@ -239,18 +256,34 @@ export async function archiveExcessDone(cwd: string, board: BoardData): Promise<
   const path = archivePath(cwd)
   await mkdir(dirname(path), { recursive: true })
   let existing: BoardCard[] = []
+  let raw: string | undefined
   try {
-    const raw = await readFile(path, 'utf8')
-    const parsed = JSON.parse(raw) as { version?: number; archived?: BoardCard[] }
-    if (Array.isArray(parsed.archived)) existing = parsed.archived
+    raw = await readFile(path, 'utf8')
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
-  existing.push(...toArchive)
-  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
+  if (raw !== undefined) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch (error) {
+      throw new Error(`kanban: archive ${path} is not valid JSON (${(error as Error).message}); refusing to overwrite it`)
+    }
+    const archive = parsed as { version?: unknown; archived?: unknown }
+    if (archive.version !== 1 || !Array.isArray(archive.archived) || !archive.archived.every(isBoardCard)) {
+      throw new Error(`kanban: archive ${path} is not a recognized {version:1, archived:[…]} document; refusing to overwrite it`)
+    }
+    existing = archive.archived
+  }
+  // Dedupe by id: an archive-first crash (archive written, board not yet)
+  // must not append the same card twice on the next mutation.
+  const known = new Set(existing.map(card => card.id))
+  const appended = toArchive.filter(card => !known.has(card.id))
+  existing.push(...appended)
+  const tmp = `${path}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`
   await writeFile(tmp, JSON.stringify({ version: 1, archived: existing }, null, 2) + '\n', 'utf8')
   await renameWithRetry(tmp, path)
-  return { count: toArchive.length, path }
+  return { count: appended.length, path }
 }
 
 /** Board counts by status (the UI's column headers). */
@@ -293,56 +326,186 @@ export function boardLockPath(cwd: string): string {
   return `${boardPath(cwd)}.lock`
 }
 
-/** How long a writer waits for the board lock before failing loudly. */
-const BOARD_LOCK_WAIT_MS = 5_000
-/** A lock file older than this belongs to a crashed writer and may be broken. */
-const BOARD_LOCK_STALE_MS = 15_000
-/** Retry interval while another writer holds the lock. */
+/** How long a writer waits for a live holder before failing loudly. */
+const BOARD_LOCK_WAIT_MS = 10_000
+/** Retry interval while another live writer holds the lock. */
 const BOARD_LOCK_RETRY_MS = 25
+/** Age after which a lock written on another host (unverifiable pid) is stale. */
+const BOARD_LOCK_REMOTE_STALE_MS = 120_000
+/** Age after which an unreadable/legacy lock file is treated as stale. */
+const BOARD_LOCK_UNREADABLE_STALE_MS = 15_000
+/** Heartbeat interval: keeps mtime fresh for the cross-host age fallback. */
+const BOARD_LOCK_HEARTBEAT_MS = 2_000
+
+/** Lock paths currently held BY THIS PROCESS → their token. */
+const heldBoardLocks = new Map<string, string>()
+
+/** Identity written into the lock file; ownership is checked against it. */
+interface BoardLockInfo {
+  /** Random per-acquisition token (release only removes the file it owns). */
+  token: string
+  /** Writer process id; same-host liveness is checked before any takeover. */
+  pid: number
+  /** Writer host; a pid means nothing across hosts. */
+  host: string
+  /** Acquisition time (diagnostics; staleness uses mtime/liveness). */
+  acquiredAt: number
+}
+
+/** Read and validate a lock file; undefined when unreadable/legacy/corrupt. */
+function readBoardLockInfo(lock: string): BoardLockInfo | undefined {
+  try {
+    const parsed = JSON.parse(readFileSync(lock, 'utf8')) as Partial<BoardLockInfo>
+    if (typeof parsed.token !== 'string' || parsed.token === '') return undefined
+    if (typeof parsed.pid !== 'number' || !Number.isInteger(parsed.pid)) return undefined
+    if (typeof parsed.host !== 'string') return undefined
+    return {
+      token: parsed.token,
+      pid: parsed.pid,
+      host: parsed.host,
+      acquiredAt: typeof parsed.acquiredAt === 'number' ? parsed.acquiredAt : 0,
+    }
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether a same-host pid still exists (EPERM counts as alive). */
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/** Age of the lock file in ms, or undefined when it cannot be stat-ed. */
+function boardLockAgeMs(lock: string): number | undefined {
+  try {
+    return Date.now() - statSync(lock).mtimeMs
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Decide whether a lock may be taken over:
+ *  - same host: the recorded pid must be gone (a suspended/GC-paused live
+ *    holder keeps its pid, so its lock is never stolen);
+ *  - other/unreadable host: age-based fallback (no cross-host liveness probe).
+ */
+function isBoardLockStale(lock: string, info: BoardLockInfo | undefined, age: number | undefined): boolean {
+  if (info === undefined || info.host !== hostname()) {
+    const limit = info === undefined ? BOARD_LOCK_UNREADABLE_STALE_MS : BOARD_LOCK_REMOTE_STALE_MS
+    return age !== undefined && age > limit
+  }
+  if (info.pid === process.pid) {
+    // Same process: a lock carrying our live token is held by a concurrent
+    // caller of THIS process and must be waited for, not stolen. A different
+    // token with our pid is a leftover from a process that crashed and whose
+    // pid was recycled: take it over.
+    if (heldBoardLocks.get(lock) === info.token) return false
+    return true
+  }
+  return !pidAlive(info.pid)
+}
+
+/**
+ * Break a stale lock without ever unlinking a live holder's lock: move the
+ * candidate aside, verify the moved inode still carries the token we judged
+ * stale, then delete it. A racing takeover restores the file if the token
+ * changed between the decision and the rename.
+ */
+async function takeOverBoardLock(lock: string, expected: BoardLockInfo | undefined): Promise<void> {
+  const moved = `${lock}.stale-${randomUUID()}`
+  try {
+    await rename(lock, moved)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
+  }
+  const observed = readBoardLockInfo(moved)
+  const sameOwner = expected === undefined ? observed === undefined : observed?.token === expected.token
+  if (!sameOwner) {
+    // Someone replaced the lock between our decision and the rename: put it back.
+    try {
+      await rename(moved, lock)
+    } catch {
+      // Lock path already repopulated; leave the moved file for manual cleanup.
+    }
+    return
+  }
+  try {
+    await unlink(moved)
+  } catch {
+    // Already gone.
+  }
+}
 
 /**
  * Acquire the advisory board lock (`KANBAN.json.lock`, created with O_EXCL).
  * Multiple sessions/agents share one KANBAN.json; without this a read-modify-write
  * pair can lose an update (each writer reads the same snapshot, last rename wins).
- * The lock is deliberately short-lived: every mutation holds it only for its own
- * read → mutate → atomic rename. A crashed writer is recovered by breaking a lock
- * older than {@link BOARD_LOCK_STALE_MS}.
+ * Ownership is token-checked: release only removes the file this acquisition
+ * created, and a live holder is never treated as stale (a dead same-host pid is
+ * the takeover signal; cross-host locks fall back to age).
  * @param cwd - absolute workspace root.
- * @returns the release function (idempotent, best-effort).
+ * @returns the release function (idempotent, ownership-checked).
  */
 async function acquireBoardLock(cwd: string): Promise<() => void> {
   const lock = boardLockPath(cwd)
+  const token = randomUUID()
   const deadline = Date.now() + BOARD_LOCK_WAIT_MS
   for (;;) {
     try {
       const fd = openSync(lock, 'wx')
       try {
-        writeFileSync(fd, `${process.pid} ${Date.now()}`, 'utf8')
+        const info: BoardLockInfo = { token, pid: process.pid, host: hostname(), acquiredAt: Date.now() }
+        writeFileSync(fd, JSON.stringify(info), 'utf8')
       } finally {
         closeSync(fd)
       }
-      return () => {
+      heldBoardLocks.set(lock, token)
+      const heartbeat = setInterval(() => {
         try {
-          unlinkSync(lock)
+          const now = new Date()
+          utimesSync(lock, now, now)
         } catch {
-          // Already released (or broken as stale): nothing to clean up.
+          // The lock vanished (external cleanup); the held mutation still owns
+          // the board until it finishes, and its release becomes a no-op.
         }
+      }, BOARD_LOCK_HEARTBEAT_MS)
+      heartbeat.unref?.()
+      return () => {
+        clearInterval(heartbeat)
+        releaseBoardLock(lock, token)
+        if (heldBoardLocks.get(lock) === token) heldBoardLocks.delete(lock)
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-      try {
-        if (Date.now() - statSync(lock).mtimeMs > BOARD_LOCK_STALE_MS) {
-          unlinkSync(lock)
-          continue
-        }
-      } catch {
-        continue // The lock vanished between open and stat: retry immediately.
+      const info = readBoardLockInfo(lock)
+      const age = boardLockAgeMs(lock)
+      if (isBoardLockStale(lock, info, age)) {
+        await takeOverBoardLock(lock, info)
+        continue
       }
       if (Date.now() > deadline) {
-        throw new Error(`kanban: board is locked by another writer (${lock}); retry the operation`)
+        const holder = info === undefined ? 'an unreadable lock file' : `pid ${info.pid} on ${info.host}`
+        throw new Error(`kanban: board is locked by ${holder} (${lock}); retry the operation`)
       }
       await sleep(BOARD_LOCK_RETRY_MS)
     }
+  }
+}
+
+/** Remove the lock only when this acquisition still owns it. */
+function releaseBoardLock(lock: string, token: string): void {
+  if (readBoardLockInfo(lock)?.token !== token) return
+  try {
+    unlinkSync(lock)
+  } catch {
+    // Already gone or unlinkable; never throw from a release path.
   }
 }
 
@@ -361,7 +524,7 @@ export async function withBoardLock<T>(cwd: string, fn: () => Promise<T>): Promi
   }
 }
 
-/** One mutation's outcome: the fresh board plus the card it touched. */
+/** One mutation's outcome: the fresh board plus the card it touched. *//** One mutation's outcome: the fresh board plus the card it touched. */
 export interface BoardMutation {
   /** The fresh board view (same shape the Web route and `/kanban` render). */
   view: BoardView

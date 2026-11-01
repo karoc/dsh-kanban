@@ -65,7 +65,12 @@ function createBoardApi(): BoardApi {
     if (!response.ok || body.ok !== true || body.cards === undefined) {
       throw new Error(body.error ?? `kanban: GET failed with ${response.status}`)
     }
-    return { path: body.path as string, cards: body.cards, counts: body.counts as BoardViewPayload['counts'] }
+    return {
+      path: body.path as string,
+      cards: body.cards,
+      counts: body.counts as BoardViewPayload['counts'],
+      ...body.archived === undefined ? {} : { archived: body.archived },
+    }
   }
   const mutate = async (payload: BoardMutationBody): Promise<BoardViewPayload> => {
     const response = await fetch(endpoint, {
@@ -77,7 +82,12 @@ function createBoardApi(): BoardApi {
     if (!response.ok || body.ok !== true || body.cards === undefined) {
       throw new Error(body.error ?? `kanban: POST failed with ${response.status}`)
     }
-    return { path: body.path as string, cards: body.cards, counts: body.counts as BoardViewPayload['counts'] }
+    return {
+      path: body.path as string,
+      cards: body.cards,
+      counts: body.counts as BoardViewPayload['counts'],
+      ...body.archived === undefined ? {} : { archived: body.archived },
+    }
   }
   const getSpec = async (cwd: string): Promise<NoteSpecView> => {
     const response = await fetch(`${specEndpoint}?cwd=${encodeURIComponent(cwd)}`)
@@ -201,12 +211,13 @@ export function apply(ctx: ClientContext): void {
     },
     t,
     // Jump to the session that created a card (locate the handling session).
+    // Session navigation belongs to ui-workspace: `ISessions.open` never
+    // existed, so the old call threw and left the user on the current chat.
     openSession: (sessionId: string) => {
-      const sessions = ctx.get('sessions') as { open: (id: string) => void } | undefined
-      if (sessions === undefined) return
       const layout = ctx.get('layout') as { selectPanel?: (id: null) => void } | undefined
       layout?.selectPanel?.(null)
-      sessions.open(sessionId)
+      const uiWorkspace = ctx.get('uiWorkspace') as { openSession?: (id: string) => void } | undefined
+      uiWorkspace?.openSession?.(sessionId)
     },
   })
 

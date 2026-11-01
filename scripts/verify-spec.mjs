@@ -19,6 +19,13 @@ class FakeCommands extends Service {
   register() { return () => {} }
 }
 
+class FakeConnection extends Service {
+  constructor(ctx) { super(ctx, 'connection') }
+  requestRejection(req) {
+    return req.headers['x-test-untrusted'] !== undefined ? 403 : undefined
+  }
+}
+
 const ws = await mkdtemp(join(tmpdir(), 'kanban-spec-'))
 // Seed a custom overrides file: custom format template + subset of classes.
 await mkdir(join(ws, '.agents', 'notes'), { recursive: true })
@@ -34,6 +41,7 @@ await ctx.plugin(ToolRuntime, {})
 await installToolExecutor(ctx)
 await ctx.plugin(FakeWebServer)
 await ctx.plugin(FakeCommands)
+await ctx.plugin(FakeConnection)
 await ctx.plugin(kanban)
 await new Promise(resolve => setTimeout(resolve, 200))
 

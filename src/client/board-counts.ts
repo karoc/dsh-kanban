@@ -9,6 +9,10 @@
 const listeners = new Set<() => void>()
 let counts: { open: number } = { open: 0 }
 let pollTimer: ReturnType<typeof setInterval> | null = null
+/** Monotonic request sequence: only the latest response may publish a count. */
+let requestSeq = 0
+/** Trailing coalescing timer for workspace-feed triggers. */
+let coalesceTimer: ReturnType<typeof setTimeout> | null = null
 
 /** Subscribe to count changes; returns an unsubscribe. */
 export function subscribeCounts(fn: () => void): () => void {
@@ -23,9 +27,13 @@ export function getCountsSnapshot(): { open: number } {
 
 /** Fetch the open-item count for one workspace and publish it. */
 export async function refreshCounts(cwd: string): Promise<void> {
+  const seq = ++requestSeq
   try {
     const response = await fetch(`/kanban/counts?cwd=${encodeURIComponent(cwd)}`)
     const body = await response.json() as { ok: boolean; open?: number }
+    // Drop a response that a newer request (workspace switch, faster poll)
+    // superseded: the badge must never show another workspace's count.
+    if (seq !== requestSeq) return
     if (response.ok && body.ok === true && typeof body.open === 'number') {
       counts = { open: body.open }
       for (const fn of listeners) fn()
@@ -62,8 +70,14 @@ export function startCountsPolling(resolveCwd: () => string | undefined, interva
  * for the next poll interval).
  */
 export function triggerCountsPoll(): void {
-  const cwd = latestResolveCwd?.()
-  if (cwd !== undefined && cwd !== '') void refreshCounts(cwd)
+  // Both workspace feeds publish often; coalesce bursts into one request
+  // instead of one GET (a full board read on the host) per publication.
+  if (coalesceTimer !== null) return
+  coalesceTimer = setTimeout(() => {
+    coalesceTimer = null
+    const cwd = latestResolveCwd?.()
+    if (cwd !== undefined && cwd !== '') void refreshCounts(cwd)
+  }, 250)
 }
 
 /** Stop polling; keeps the last published count. */

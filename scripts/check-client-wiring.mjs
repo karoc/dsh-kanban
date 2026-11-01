@@ -67,6 +67,30 @@ try {
   fail('lib/client.js is missing — run `pnpm bundle` before this gate')
 }
 
+// 5b) dsh.client.inject must cover every non-seed runtime require, and no stale
+// entry may linger: a listed package that is absent/disabled stalls the row, and
+// an unlisted non-seed require only works by transitive luck.
+const pkg = JSON.parse(read('package.json'))
+const declaredInject = pkg.dsh?.client?.inject ?? []
+const SEED_MODULES = new Set(['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives'])
+const bundlePath = resolve(root, 'lib/client.js')
+try {
+  const bundleSource = readFileSync(bundlePath, 'utf8')
+  const requires = [...bundleSource.matchAll(/require\("([^"]+)"\)/g)].map(match => match[1])
+  for (const id of requires) {
+    if (!SEED_MODULES.has(id) && !declaredInject.includes(id)) {
+      fail(`lib/client.js requires ${id} but dsh.client.inject does not list it — it only works by transitive module arrival`)
+    }
+  }
+  for (const id of declaredInject) {
+    if (!requires.includes(id) && !SEED_MODULES.has(id)) {
+      fail(`dsh.client.inject lists ${id} but the built bundle never requires it — remove the stale edge (it delays the row and can block it if that package is disabled)`)
+    }
+  }
+} catch {
+  fail('lib/client.js is missing — run `npm run bundle` before this gate')
+}
+
 // 5) The page container matches the injected styles.
 if (!/\.kb-panel \{/.test(styles)) fail('src/client/styles.ts has no .kb-panel rule — the panel container is unstyled')
 if (!page.includes('className="kb-panel"')) fail('BoardPage.tsx no longer renders className="kb-panel"')

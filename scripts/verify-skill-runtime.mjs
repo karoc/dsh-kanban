@@ -61,12 +61,20 @@ class FakeCommands extends Service {
   register() { return () => {} }
 }
 
+class FakeConnection extends Service {
+  constructor(ctx) { super(ctx, 'connection') }
+  requestRejection(req) {
+    return req.headers['x-test-untrusted'] !== undefined ? 403 : undefined
+  }
+}
+
 const ctx = new Context()
 await ctx.plugin(SystemPrompt, {})
 await ctx.plugin(ToolRuntime, {})
 await installToolExecutor(ctx)
 await ctx.plugin(FakeWebServer)
 await ctx.plugin(FakeCommands)
+await ctx.plugin(FakeConnection)
 await ctx.plugin(SkillRegistry, {})
 
 // A same-named candidate from a user-level source, registered BEFORE the

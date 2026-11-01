@@ -206,11 +206,17 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
   // The background poll skips setState entirely when it matches, so an
   // unchanged board leaves the DOM — and the user's scroll position — intact.
   const lastSignature = useRef<string | null>(null)
+  // Monotonic fetch sequence + the cwd the view currently belongs to. A slow
+  // response for a previous workspace must never paint under the new picker.
+  const requestSeq = useRef(0)
+  const cwdRef = useRef<string | undefined>(undefined)
 
   const cwd = selectedWorkspace?.cwd
+  cwdRef.current = cwd
 
   const refresh = useCallback(async (opts?: { silent?: boolean }): Promise<void> => {
     if (cwd === undefined) return
+    const seq = ++requestSeq.current
     const silent = opts?.silent ?? false
     if (!silent) {
       setLoading(true)
@@ -218,6 +224,7 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
     }
     try {
       const board = await api.get(cwd)
+      if (seq !== requestSeq.current) return
       const sorted = sortCards(board.cards)
       const signature = JSON.stringify(sorted)
       // Every successful fetch (silent or not) marks the header "auto-refreshed
@@ -242,6 +249,9 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
 
   // (Re)load whenever the workspace changes; the page mounts per open.
   useEffect(() => {
+    // Workspace switch: the previous board's signature/notice must not leak.
+    lastSignature.current = null
+    setArchivedNotice(undefined)
     void refresh()
   }, [refresh])
 
@@ -253,33 +263,42 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
     return () => clearInterval(timer)
   }, [refresh])
 
-  const applyMutation = useCallback(async (body: BoardMutation): Promise<void> => {
-    if (cwd === undefined) return
+  const applyMutation = useCallback(async (body: BoardMutation): Promise<boolean> => {
+    if (cwd === undefined) return false
     setError(undefined)
     try {
       const board = await api.mutate({ ...body, cwd })
+      // The user may have switched workspaces while the POST was in flight.
+      if (cwdRef.current !== cwd) return false
       setCards(sortCards(board.cards))
       setPath(board.path)
       setArchivedNotice(board.archived)
+      return true
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
+      return false
     }
   }, [api, cwd])
 
   const addCard = useCallback((): void => {
     const title = draftTitle.trim()
     if (title === '' || cwd === undefined) return
-    void applyMutation({
-      op: 'add',
-      title,
-      ...draftSummary.trim() !== '' ? { summary: draftSummary.trim() } : {},
-      ...draftRationale.trim() !== '' ? { rationale: draftRationale.trim() } : {},
-      ...draftRejected.trim() !== '' ? { rejected: draftRejected.trim() } : {},
-    })
-    setDraftTitle('')
-    setDraftSummary('')
-    setDraftRationale('')
-    setDraftRejected('')
+    void (async () => {
+      const ok = await applyMutation({
+        op: 'add',
+        title,
+        ...draftSummary.trim() !== '' ? { summary: draftSummary.trim() } : {},
+        ...draftRationale.trim() !== '' ? { rationale: draftRationale.trim() } : {},
+        ...draftRejected.trim() !== '' ? { rejected: draftRejected.trim() } : {},
+      })
+      // Keep the typed card on failure (locked/invalid board): clearing the
+      // drafts before the POST resolves silently destroyed the user's text.
+      if (!ok) return
+      setDraftTitle('')
+      setDraftSummary('')
+      setDraftRationale('')
+      setDraftRejected('')
+    })()
   }, [applyMutation, cwd, draftTitle, draftSummary, draftRationale, draftRejected])
 
   const moveCard = useCallback((id: string, status: BoardCardView['status']): void => {
@@ -375,7 +394,15 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
                     value={draftTitle}
                     placeholder={t('addPlaceholder')}
                     onChange={event => setDraftTitle(event.target.value)}
-                    onKeyDown={event => { if (event.key === 'Enter') addCard() }}
+                    onKeyDown={event => {
+                      // Enter also commits an IME composition (Chinese input):
+                      // creating the card from partial text loses it.
+                      if (event.key !== 'Enter') return
+                      const native = event.nativeEvent as KeyboardEvent
+                      if (native.isComposing || native.keyCode === 229) return
+                      addCard()
+                    }}
+                    aria-label={t('addPlaceholder')}
                   />
                   <Button
                     variant="primary"
@@ -640,7 +667,7 @@ const Card = memo(function Card(props: {
       <div
         role="button"
         tabIndex={0}
-        aria-label={t('detailHint')}
+        aria-label={`${card.title} — ${t('detailHint')}`}
         aria-haspopup="dialog"
         className="kb-card-hit"
         onClick={openDetail}
