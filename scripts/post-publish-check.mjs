@@ -63,6 +63,11 @@ function positiveInt(raw, fallback) {
 
 const ATTEMPTS = positiveInt(process.env.DSH_POSTPUBLISH_ATTEMPTS, 100)
 const INTERVAL_MS = positiveInt(process.env.DSH_POSTPUBLISH_INTERVAL_MS, 3000)
+// A tarball 404 right after upload is registry/CDN propagation, not proof the
+// upload was dropped: 0.2.10/0.5.0 were visible with `latest` moved while the
+// tarball still answered 404; the same URL served fine minutes later.
+const TARBALL_PROPAGATION_ATTEMPTS = positiveInt(process.env.DSH_POSTPUBLISH_TARBALL_ATTEMPTS, 6)
+const TARBALL_PROPAGATION_INTERVAL_MS = positiveInt(process.env.DSH_POSTPUBLISH_TARBALL_INTERVAL_MS, 10_000)
 const TAG_ATTEMPTS = Math.min(ATTEMPTS, 20)
 const TARBALL_TIMEOUT_MS = positiveInt(process.env.DSH_POSTPUBLISH_TARBALL_TIMEOUT_MS, 20000)
 const MAX_BUFFER = 8 * 1024 * 1024
@@ -311,11 +316,25 @@ if (visible) {
   if (typeof tarballUrl !== 'string' || tarballUrl === '') {
     warnings.push('the registry returned no tarball URL — tarball contents were not verified; re-run this script later')
   } else {
-    const download = await obtainTarball(tarballUrl)
+    let download = await obtainTarball(tarballUrl)
+    for (let attempt = 1; attempt <= TARBALL_PROPAGATION_ATTEMPTS
+      && download.kind === 'http' && (download.status === 404 || download.status === 410); attempt += 1) {
+      console.log(`   (tarball not served yet — registry/CDN propagation; retry ${attempt}/${TARBALL_PROPAGATION_ATTEMPTS})`)
+      await sleep(TARBALL_PROPAGATION_INTERVAL_MS)
+      download = await obtainTarball(tarballUrl)
+    }
     const grade = download.kind === 'ok' ? { fatal: false } : gradeDownloadFailure(download)
 
     if (download.kind !== 'ok') {
-      if (grade.fatal) problems.push(`could not verify the published tarball: ${grade.reason}`)
+      const propagating = download.kind === 'http' && (download.status === 404 || download.status === 410)
+      if (propagating) {
+        warnings.push(
+          `the tarball is still not served after ~${Math.round((TARBALL_PROPAGATION_ATTEMPTS * TARBALL_PROPAGATION_INTERVAL_MS) / 1000)}s `
+          + `(HTTP ${download.status}) while version ${version} and dist-tags.latest are visible. `
+          + 'Publication is CONFIRMED; tarball contents were not verified (registry/CDN propagation). '
+          + 'Do NOT re-publish; re-run this check later.',
+        )
+      } else if (grade.fatal) problems.push(`could not verify the published tarball: ${grade.reason}`)
       else warnings.push(`could not verify the published tarball: ${grade.reason} — re-run this script once the network recovers`)
     } else {
       const buffer = download.buffer

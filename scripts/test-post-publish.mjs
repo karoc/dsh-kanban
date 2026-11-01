@@ -10,7 +10,7 @@
  *   3. definite 404        → exit 1 (version and package document both absent)
  *   4. tag lags behind     → exit 0 (advisory warning only)
  *   5. tag ahead           → exit 0 (advisory warning only)
- *   6. tarball HTTP 404    → exit 1 after one retry
+ *   6. tarball HTTP 404    → exit 0: publication CONFIRMED, propagation warning
  *   7. tarball not gzip    → exit 1
  *   8. listing misses file → exit 1
  *   9. registry unreachable→ exit 0 (transport failures never fail a release)
@@ -198,6 +198,8 @@ function runCheck(overrides = {}) {
     DSH_POSTPUBLISH_REGISTRY_BASE: overrides.registry ?? base,
     DSH_POSTPUBLISH_ATTEMPTS: '2',
     DSH_POSTPUBLISH_INTERVAL_MS: '50',
+    DSH_POSTPUBLISH_TARBALL_ATTEMPTS: '2',
+    DSH_POSTPUBLISH_TARBALL_INTERVAL_MS: '10',
     DSH_POSTPUBLISH_TARBALL_TIMEOUT_MS: '800',
   })
   return new Promise((resolve) => {
@@ -250,7 +252,7 @@ const scenarios = [
   {
     name: 'tarball HTTP 404',
     setup: () => Object.assign(state, { mode: 'tarball-404', tag: version, versionVisible: true, packageVisible: true }),
-    expect: (result) => result.code === 1 && result.output.includes('HTTP 404') && hits.tarball === 2,
+    expect: (result) => result.code === 0 && result.output.includes('Do NOT re-publish') && hits.tarball >= 2,
   },
   {
     name: 'tarball not gzip',
