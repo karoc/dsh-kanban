@@ -7,3 +7,6 @@ node_modules/
 /.agents/
 /icons-gallery.html
 /icons-gallery.png
+
+# publish:release pack record (gitignored)
+.verify/
