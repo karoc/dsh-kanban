@@ -116,6 +116,43 @@ if (onDisk.cards[0].sourceSessionId !== fakeAgent.id) {
   console.error('board_add did not record the owning session id as sourceSessionId')
   process.exit(1)
 }
+// 2b) board_list render carries the exact id and defaults to open cards.
+{
+  const list = await executeTool(ctx, {
+    callId: 'call-list-1',
+    name: 'board_list',
+    arguments: {},
+    agent: fakeAgent,
+    signal: new AbortController().signal,
+  })
+  const listText = list.content?.map(block => block.text).join('') ?? ''
+  if (!listText.includes(onDisk.cards[0].id)) {
+    console.error('board_list render does not contain the card id:', listText)
+    process.exit(1)
+  }
+  const done = await executeTool(ctx, {
+    callId: 'call-add-done',
+    name: 'board_add',
+    arguments: { title: '已完成卡', status: 'done', rationale: 'r', summary: 's', rejected: 'x' },
+    agent: fakeAgent,
+    signal: new AbortController().signal,
+  })
+  const doneId = (done.content?.map(block => block.text).join('') ?? '').match(/card-[0-9a-f-]{36}/)?.[0]
+  const list2 = await executeTool(ctx, {
+    callId: 'call-list-2',
+    name: 'board_list',
+    arguments: {},
+    agent: fakeAgent,
+    signal: new AbortController().signal,
+  })
+  const list2Text = list2.content?.map(block => block.text).join('') ?? ''
+  if (doneId === undefined || list2Text.includes(doneId)) {
+    console.error('board_list default did not exclude the done card:', list2Text)
+    process.exit(1)
+  }
+  console.log('board_list render ids + open-only default: ok')
+}
+
 await rm(ws, { recursive: true, force: true })
 console.log('ok: all 4 tools registered and board_add persisted end-to-end (with sourceSessionId)')
 

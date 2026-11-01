@@ -87,10 +87,12 @@ dsh's **system prompt** and visible to the user:
 
 **Data-safety commitment**: the plugin **only writes** board/note files (plus,
 on a shell with no skill registry, the `~/.agents/skills/kanban-use/SKILL.md`
-copy described below); there is no startup, scheduled, or install-time cleanup.
-Cards are removed only by an explicit `board_remove` / the Web delete button
-(which requires a confirmation Modal — no accidental one-click loss); excess
-done cards (**beyond 100, oldest first**) are **archived** (moved to
+copy described below, and short-lived `KANBAN.json.lock` / `*.tmp` files next to
+the board while a write is in flight); there is no startup, scheduled, or
+install-time cleanup. Cards are removed only by an explicit `board_remove` / the
+Web delete button (which requires a confirmation Modal — no accidental one-click
+loss) and removal is permanent (not archived) — prefer moving finished work to
+done; excess done cards (**beyond 100, oldest first**) are **archived** (moved to
 `.agents/notes/archive.json`), never deleted. All board data lives inside your
 **workspace directory** (git-trackable, hand-editable).
 

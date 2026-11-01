@@ -5,6 +5,25 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.13] - 2026-11-01
+
+### Changed
+
+- `board_list detail: true` truncates each body field at 1,200 characters instead
+  of 400: real done summaries average ~700 chars and often put the commit/PR
+  coordinates past the old cut, so the "read the hand-off without asking" promise
+  lost its evidence.
+- The session-start snapshot now caps at **25** open cards with a `+N more` line
+  (100 synthetic open cards used to inject ~6.6k tokens on every request).
+- `note_add` accepts any class from the workspace's effective spec (the tool
+  schema no longer pins the six defaults; runtime validation still rejects
+  classes the workspace disables).
+- `board_remove` states that removal is permanent (not archived) and that
+  finished work belongs in `done`; README's data-safety paragraph now lists the
+  transient `KANBAN.json.lock` / `*.tmp` files and the removal semantics.
+- `verify-tools` now asserts that `board_list` renders exact ids and defaults to
+  open cards (only `board_add` was covered before).
+
 ## [0.2.12] - 2026-11-01
 
 ### Fixed

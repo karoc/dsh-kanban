@@ -216,7 +216,7 @@ const BOARD_OUTPUT = {
     const detail = (args as { detail?: boolean } | undefined)?.detail === true
     const bodyLines = (card: BoardToolCard): string[] => {
       if (!detail) return []
-      const truncate = (text: string): string => text.length > 400 ? text.slice(0, 400) + '…' : text
+      const truncate = (text: string): string => text.length > 1200 ? text.slice(0, 1200) + '…' : text
       return [
         card.description === undefined ? '' : `  description: ${truncate(card.description)}`,
         card.summary === undefined ? '' : `  summary: ${truncate(card.summary)}`,
@@ -370,7 +370,7 @@ function boardSnapshotText(context: { agent?: { session: { header: { cwd?: strin
   }
   const allOpen = board.cards.filter(card => card.status === 'todo' || card.status === 'in_progress')
   if (allOpen.length === 0) return ''
-  const MAX_SNAPSHOT_OPEN = 40
+  const MAX_SNAPSHOT_OPEN = 25
   const open = allOpen.slice(0, MAX_SNAPSHOT_OPEN)
   const lines = open.map(card => {
     const tags = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''
@@ -566,7 +566,7 @@ const NOTE_OUTPUT = {
     additionalProperties: false,
     properties: {
       path: { type: 'string', required: true },
-      noteClass: { type: 'string', required: true, enum: NOTE_CLASSES },
+      noteClass: { type: 'string', required: true },
       topic: { type: 'string', required: true },
     },
   } as const,
@@ -815,8 +815,9 @@ export function apply(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: 'board_remove',
-    description: 'Remove one card from the current workspace kanban board by its exact id. '
-      + 'Call board_list first to get the id.',
+    description: 'Remove one card permanently from the current workspace kanban board by its exact id. '
+      + 'Prefer moving finished work to done: removal is NOT archived and cannot be undone. Use it only '
+      + 'for mistaken/duplicate cards. Call board_list first to get the exact id.',
     parameters: {
       id: { type: 'string', required: true, description: 'Exact card id returned by board_list.' },
     },
@@ -846,8 +847,7 @@ export function apply(ctx: Context): void {
       class: {
         type: 'string',
         required: true,
-        enum: NOTE_CLASSES,
-        description: 'Note class: feature | bug-fix | simplification | architecture | process | testing.',
+        description: 'Note class (must be one of the workspace effective classes; defaults: feature | bug-fix | simplification | architecture | process | testing).',
       },
       topic: {
         type: 'string',
@@ -880,12 +880,12 @@ export function apply(ctx: Context): void {
     output: NOTE_OUTPUT,
     execute(args, exec) {
       const cwd = workspaceOf(exec.agent?.session.header.cwd)
-      return writeAgentNote(cwd, args.class, args.topic, {
+      return writeAgentNote(cwd, args.class as NoteClass, args.topic, {
         problem: args.problem,
         decision: args.decision,
         ...args.alternatives === undefined ? {} : { alternatives: args.alternatives },
         ...args.consequences === undefined ? {} : { consequences: args.consequences },
-      }, args.supersede === true).then(path => ({ path, noteClass: args.class, topic: args.topic }))
+      }, args.supersede === true).then(path => ({ path, noteClass: args.class as NoteClass, topic: args.topic }))
     },
     presentCall: args => present('Write Agent Note', 'other', (args as { topic: string }).topic),
   }))
