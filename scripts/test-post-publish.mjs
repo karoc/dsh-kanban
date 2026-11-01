@@ -94,6 +94,13 @@ const state = {
   versionVisible: true,
   packageVisible: true,
   omitTarball: false,
+  /**
+   * Whether the registry serves the version's tarball at the deterministic npm
+   * URL (`/<name>/-/<basename>-<version>.tgz`). That URL is the discriminator
+   * between "the upload landed, the index lags" and "the registry never created
+   * this version" — npm exits 0 when the publish PUT is answered 202.
+   */
+  syntheticTarball: 'present',
 }
 
 /** Per-scenario request counters (reset by the loop). */
@@ -137,6 +144,18 @@ const server = createServer((request, response) => {
       version,
       ...(state.omitTarball ? {} : { dist: { tarball: `${base}/tarball/${state.mode}` } }),
     }))
+    return
+  }
+  if (path === `/fixture-pkg/-/fixture-pkg-${version}.tgz`) {
+    // The synthetic npm tarball layout, probed with HEAD (and GET as fallback).
+    if (state.syntheticTarball === 'absent') {
+      response.writeHead(404, { 'content-type': 'text/html' })
+      response.end('<!DOCTYPE html><title>Not Found</title>')
+      return
+    }
+    response.writeHead(200, { 'content-type': 'application/octet-stream' })
+    if (request.method === 'HEAD') response.end()
+    else response.end(tarballs.ok)
     return
   }
   if (path.startsWith('/tarball/')) {
@@ -228,11 +247,31 @@ const scenarios = [
       && result.output.includes('release is live and consistent'),
   },
   {
-    name: 'index lag (version unindexed, package live)',
-    setup: () => Object.assign(state, { mode: 'normal', tag: version, versionVisible: false, packageVisible: true }),
+    name: 'index lag (version unindexed, package live, tarball already served)',
+    setup: () => Object.assign(state, {
+      mode: 'normal', tag: version, versionVisible: false, packageVisible: true, syntheticTarball: 'present',
+    }),
     expect: (result) => result.code === 0
       && result.output.includes('is not indexed yet')
+      && result.output.includes('the version tarball is already served, so the upload landed')
+      && !result.output.includes('is NOT on the registry')
       && result.output.includes('Re-run to complete the checks'),
+  },
+  {
+    // The live 0.4.7 incident: npm exited 0 because the registry answered 202
+    // Accepted, while the version document AND its tarball both 404 — and the
+    // version DID become live much later without a retry. The check must report
+    // the ambiguity (unserved ≠ dropped) instead of claiming either extreme.
+    name: 'accepted-but-not-visible-yet (version document and tarball both 404)',
+    setup: () => Object.assign(state, {
+      mode: 'normal', tag: '1.2.2', versionVisible: false, packageVisible: true, syntheticTarball: 'absent',
+    }),
+    expect: (result) => result.code === 0
+      && result.output.includes('is not served by the registry yet')
+      && result.output.includes('202 Accepted')
+      && result.output.includes('AMBIGUOUS')
+      && result.output.includes('do NOT re-publish')
+      && !result.output.includes('the upload landed'),
   },
   {
     name: 'definite 404 for version and package',

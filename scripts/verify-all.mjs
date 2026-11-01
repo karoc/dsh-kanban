@@ -41,6 +41,7 @@ const STEPS = [
   { id: 'gate:skill-runtime', command: 'node scripts/verify-skill-runtime.mjs' },
   { id: 'guarantees', command: 'node scripts/check-guarantees.mjs' },
   { id: 'controls', command: 'node scripts/test-negative-controls.mjs' },
+  { id: 'fixture:post-publish', command: 'node scripts/test-post-publish.mjs' },
   { id: 'release-check', command: 'node scripts/release-check.mjs', documentedFailure: true },
 ]
 
