@@ -95,6 +95,28 @@ export const KANBAN_STYLES = `
   max-height: 350px; overflow-y: auto;
 }
 .kb-column-head { display: flex; align-items: center; gap: 8px; flex: none; }
+/* Done-column footer: "showing 20 of 80" + the load-more step. Pinned under the
+   scrolling card area so the button does not travel with the list. */
+.kb-column-foot {
+  display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+  flex: none;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  padding-top: 8px;
+}
+.kb-column-foot-note { margin: 0; font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-tertiary); text-align: center; }
+/* Search + filter toolbar above the columns: one row that wraps on narrow
+   widths. The search field grows, the chips stay at their natural size. */
+.kb-toolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 0 16px;
+}
+.kb-toolbar-search { flex: 1 1 220px; min-width: 160px; }
+.kb-toolbar-filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kb-toolbar-label { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+/* Filtering to one status shows that column alone, full width: a 20-card page
+   reads better across the panel than inside a third of it. */
+.kb-columns-single { grid-template-columns: minmax(0, 1fr); }
+.kb-columns-single .kb-column-cards { max-height: none; }
 .kb-column-title { margin: 0; font-size: 13px; line-height: 18px; font-weight: 600; }
 .kb-column-count {
   font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary);
@@ -139,7 +161,18 @@ export const KANBAN_STYLES = `
 .kb-card-hit:focus-visible .kb-card-detail-icon {
   color: var(--dsw-alias-label-primary);
 }
-.kb-card-desc { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); word-break: break-word; }
+/* A card's description is clamped to two lines with an ellipsis, like the
+   what/why/rejected fields below it: one real card carried a 2,528-character
+   description (a ~755px card), which pushed a single row past a full screen and
+   made scanning impossible. The untruncated text lives in the detail dialog. */
+.kb-card-desc {
+  margin: 0; font-size: 12px; line-height: 18px;
+  color: var(--dsw-alias-label-secondary); word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .kb-card-fields { display: flex; flex-direction: column; gap: 4px; }
 /* Each what/why/rejected field is clamped to at most two lines with an
    ellipsis (webkit-line-clamp); the full text lives in the detail dialog. */

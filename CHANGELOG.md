@@ -5,6 +5,36 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.14] - 2026-11-17
+
+This is the first version published since **0.2.10**: the 0.2.11–0.2.13 entries
+below ship in this release too.
+
+### Changed
+
+- **The Web board page is usable at 108 cards.** The 2026-11-01 audit measured
+  the real board at 151 screens with no search, a done column that buried the
+  recent work, and one card whose description alone measured ~755 px. Now:
+  - the **done column is ordered by `updatedAt`** (then `createdAt`, then id):
+    recent completions are first instead of being buried under cards created
+    last (the ten most recently finished cards had the ten oldest creation
+    dates; one sat at #99 of 100 rows);
+  - a **search box** matches every rendered field (title, description,
+    what/why/rejected, tags, id), ANDing whitespace-separated terms;
+  - **status pills** narrow the board to one full-width column and a card's
+    **tag pills** filter by that tag (they were decorative — 630 of them);
+  - the **done column pages 20 cards at a time** with a "Load more" step, while
+    the column badge keeps counting every match; any filter lifts the window so
+    a search hit is never hidden behind the button;
+  - the card **description is clamped to two lines** with an ellipsis (full text
+    stays in the detail dialog).
+- The ordering/search/filter/paging rules moved into `src/client/board-view.ts`
+  (pure, no React/DSH imports) so `scripts/board-view.spec.mjs` can assert them
+  against a 108-card fixture: it is now part of `npm test` and the CI unit
+  matrix on Linux and Windows. Two negative controls (ordering reverted to
+  `createdAt`, clamp removed) prove those gates can fail, `docs/guarantees.md`
+  gained G22–G25, and both READMEs document the new controls.
+
 ## [0.2.13] - 2026-11-01
 
 ### Changed
