@@ -24,6 +24,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `verify-tools` now asserts that `board_list` renders exact ids and defaults to
   open cards (only `board_add` was covered before).
 
+### Fixed
+
+- **`verify-spec` no longer fails for eight hours a day, and can now fail at
+  all.** It derived the expected note file name from `toISOString()` (UTC) while
+  `note-files.ts` documents the date as the author's **local** calendar day, so
+  between 00:00 and 08:00 at UTC+8 it looked for yesterday's file and threw
+  `ENOENT` — `npm test`, and therefore `npm publish`, was red every night. Both
+  of its spec findings were also printed without setting an exit code, so a
+  plugin that ignored the workspace's note spec would have passed. They now fail
+  the process, and `node scripts/verify-spec.mjs --self-test` (wired into
+  `npm test`) seeds a template that omits `## Problem` and requires the
+  assertions to go red.
+
 ## [0.2.12] - 2026-11-01
 
 ### Fixed

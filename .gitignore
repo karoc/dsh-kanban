@@ -10,3 +10,9 @@ node_modules/
 
 # publish:release pack record (gitignored)
 .verify/
+
+# `npm run publish:release` packs a tarball beside the tree and leaves it there
+# (both on success and when the upload fails). Without this line that artifact
+# shows up as an untracked file, so the NEXT release-check fails on a dirty
+# tree for no real reason.
+/*.tgz
