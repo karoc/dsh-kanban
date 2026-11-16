@@ -35,6 +35,21 @@ below ship in this release too.
   `createdAt`, clamp removed) prove those gates can fail, `docs/guarantees.md`
   gained G22–G25, and both READMEs document the new controls.
 
+### Fixed
+
+- **The Web board page works on DSH 0.2.x again.** Every `/kanban/*` request
+  answered **400 with an empty body** on dsh 0.2.2-rc.3, so the page showed
+  "Unexpected end of JSON input" with zero cards and the sidebar badge never
+  updated. Upstream removed `Connection.requestRejection` — the trust fence this
+  plugin called on every handler under the 0.1.x model — and moved the decision
+  into `webServer` itself (routes default to `auth: 'required'`, and the admitted
+  Peer arrives as the handler's third argument). The fence now detects the host
+  generation: ≤0.1.x keeps `Connection.requestRejection`, 0.2.x relies on the
+  host's own admission and **fails closed (401) when neither a fence nor a Peer
+  is present**. `scripts/routes.spec.mjs` pins all three shapes (0.2.x 200,
+  fail-closed 401, 0.1.x 403) and a negative control restores the unguarded call
+  to prove the test goes red with `connection.requestRejection is not a function`.
+
 ## [0.2.13] - 2026-11-01
 
 ### Changed

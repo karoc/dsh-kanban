@@ -1029,9 +1029,17 @@ async function viewOf(cwd: string): Promise<BoardView> {
   }
 }
 
-/** Structural view of the host Connection service's trust check. */
+/**
+ * Structural view of the host Connection service's trust check.
+ *
+ * DSH ≤ 0.1.x exposed `requestRejection`; DSH 0.2.x REMOVED it and moved the
+ * decision into `webServer` itself (every route defaults to `auth: 'required'`,
+ * so an unauthenticated request is answered 401 before a handler runs, and the
+ * admitted Peer is passed to the handler as its third argument). The property is
+ * therefore optional and detected at call time, never assumed.
+ */
 interface RouteConnectionTrust {
-  requestRejection(request: IncomingMessage): number | undefined
+  requestRejection?(request: IncomingMessage): number | undefined
 }
 
 /** Resolve the host connection service; undefined in compositions without it. */
@@ -1041,23 +1049,39 @@ function connectionTrustOf(ctx: Context): RouteConnectionTrust | undefined {
 
 /**
  * Reject a request the deployment's Host/Origin/browser-auth checks do not
- * trust. Routes registered on `webServer` bypass the page authentication
- * unless they ask Connection, so every /kanban/* handler calls this first.
+ * trust. Two host generations exist and this must work on both:
+ *
+ * - **DSH ≤ 0.1.x**: routes registered on `webServer` bypass the page
+ *   authentication unless they ask Connection, so the fence calls
+ *   `connection.requestRejection`.
+ * - **DSH 0.2.x**: that method is gone. `webServer` now owns the decision
+ *   (routes default to `auth: 'required'`: an unauthenticated request is
+ *   answered 401 before any handler runs) and hands the admitted Peer to the
+ *   handler. Calling the removed method here threw, and the server's
+ *   last-resort guard answered **400 with an empty body** — which is what turned
+ *   the whole Web board page (and the sidebar badge) into "Unexpected end of
+ *   JSON input" on dsh 0.2.2-rc.3.
+ *
+ * Fail closed: no fence AND no admitted Peer means the route must not answer.
  * @param ctx - plugin context.
  * @param req - incoming request.
  * @param res - response to end when rejected.
+ * @param peer - the Peer the host admitted for this request, when it passes one.
  * @returns true when the request was rejected and the handler must stop.
  */
-function rejectUntrusted(ctx: Context, req: IncomingMessage, res: ServerResponse): boolean {
+function rejectUntrusted(ctx: Context, req: IncomingMessage, res: ServerResponse, peer?: unknown): boolean {
   const connection = connectionTrustOf(ctx)
-  if (connection === undefined) {
-    sendJson(res, 503, { ok: false, error: 'kanban: connection service unavailable; refusing unverified requests' })
+  if (connection !== undefined && typeof connection.requestRejection === 'function') {
+    const rejection = connection.requestRejection(req)
+    if (rejection === undefined) return false
+    res.statusCode = rejection
+    res.end()
     return true
   }
-  const rejection = connection.requestRejection(req)
-  if (rejection === undefined) return false
-  res.statusCode = rejection
-  res.end()
+  // Newer host: the route's own auth policy already ran. Without an admitted
+  // Peer there is nothing that proves the caller is trusted — refuse.
+  if (peer !== undefined) return false
+  sendJson(res, 401, { ok: false, error: 'kanban: this route requires an authenticated session' })
   return true
 }
 
@@ -1104,15 +1128,25 @@ function sendRouteError(res: ServerResponse, error: unknown): void {
 /** Register GET/POST /kanban/api — the Web board page's data channel. */
 function registerWebApi(ctx: Context): void {
   const server = ctx.get('webServer') as
-    | { register: (route: { kind: 'prefix'; path: string; handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void> }) => () => void }
+    | {
+      register: (route: {
+        kind: 'prefix'
+        path: string
+        // DSH 0.2.x hands the admitted Peer as the third argument; ≤0.1.x passes
+        // only (req, res) and answers the trust question through Connection.
+        handler: (req: IncomingMessage, res: ServerResponse, peer?: unknown) => void | Promise<void>
+      }) => () => void
+    }
     | undefined
   if (server === undefined) return
 
   ctx.effect(() => server.register({
     kind: 'prefix',
     path: '/kanban/api',
-    handler: (req, res) => {
-      if (rejectUntrusted(ctx, req, res)) return
+    handler: (req, res, peer) => {
+      // The host passes the admitted Peer from DSH 0.2.x onward; ≤0.1.x passes
+      // only (req, res) and is fenced through Connection inside rejectUntrusted.
+      if (rejectUntrusted(ctx, req, res, peer)) return
       void handle(req, res).catch(error => sendRouteError(res, error))
     },
   }), 'kanban: /kanban/api')
@@ -1121,8 +1155,8 @@ function registerWebApi(ctx: Context): void {
   ctx.effect(() => server.register({
     kind: 'prefix',
     path: '/kanban/spec',
-    handler: (req, res) => {
-      if (rejectUntrusted(ctx, req, res)) return
+    handler: (req, res, peer) => {
+      if (rejectUntrusted(ctx, req, res, peer)) return
       void handleSpec(req, res).catch(error => sendRouteError(res, error))
     },
   }), 'kanban: /kanban/spec')
@@ -1132,8 +1166,8 @@ function registerWebApi(ctx: Context): void {
   ctx.effect(() => server.register({
     kind: 'prefix',
     path: '/kanban/counts',
-    handler: (req, res) => {
-      if (rejectUntrusted(ctx, req, res)) return
+    handler: (req, res, peer) => {
+      if (rejectUntrusted(ctx, req, res, peer)) return
       void handleCounts(req, res).catch(error => sendRouteError(res, error))
     },
   }), 'kanban: /kanban/counts')
