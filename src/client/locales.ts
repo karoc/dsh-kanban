@@ -56,6 +56,15 @@ export const en = {
   detailEmpty: 'No further details on this card.',
   autoUpdatedAt: 'auto-refreshed {time}',
   missingFields: 'missing: {fields}',
+  searchPlaceholder: 'Search cards (title, body, tags)…',
+  filterAll: 'All',
+  filterStatusLabel: 'Filter by status',
+  filterByTag: 'Filter by tag {tag}',
+  filterClearTag: 'Clear the tag filter',
+  filterClear: 'Clear filters',
+  noMatches: 'No card matches the current filters.',
+  doneShowing: 'showing {shown} of {total}',
+  loadMore: 'Load more ({n} more)',
 }
 
 /** The board page copy key set. */
@@ -117,4 +126,13 @@ export const zh: { [Key in keyof typeof en]: string } = {
   detailEmpty: '这张卡片没有更多详情。',
   autoUpdatedAt: '自动更新于 {time}',
   missingFields: '缺字段：{fields}',
+  searchPlaceholder: '搜索卡片（标题、正文、标签）…',
+  filterAll: '全部',
+  filterStatusLabel: '按状态过滤',
+  filterByTag: '按标签 {tag} 过滤',
+  filterClearTag: '清除标签过滤',
+  filterClear: '清除过滤',
+  noMatches: '没有符合当前过滤条件的卡片。',
+  doneShowing: '显示 {shown} / {total}',
+  loadMore: '加载更多（还有 {n} 张）',
 }

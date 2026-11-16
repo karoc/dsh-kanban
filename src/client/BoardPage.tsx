@@ -23,6 +23,7 @@ import {
   IconPlusOutlineRegular,
   IconQueueOutlineRegular,
   IconRefreshOutlineRegular,
+  IconSearchOutlineRegular,
   IconThinkOutlineRegular,
   IconTrashOutlineRegular,
   IconWarningOutlineRegular,
@@ -32,6 +33,14 @@ import {
   Pill,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { BoardKey } from './locales.ts'
+import {
+  DONE_PAGE_SIZE,
+  EMPTY_FILTERS,
+  STATUS_ORDER,
+  buildBoardView,
+  sortCards,
+} from './board-view.ts'
+import type { BoardFilters, CardStatus, StatusFilter } from './board-view.ts'
 
 /** One card as served by the host route. */
 export interface BoardCardView {
@@ -127,17 +136,11 @@ export interface BoardPageProps {
   openSession?: (sessionId: string) => void
 }
 
-const STATUSES = ['todo', 'in_progress', 'done'] as const
+/** The columns, in render order (the view model owns the ordering rules). */
+const STATUSES = STATUS_ORDER
 
-/** Sort cards so done trails the open ones, and newest first within a status. */
-function sortCards(cards: readonly BoardCardView[]): BoardCardView[] {
-  return [...cards].sort((left, right) => {
-    const order = { todo: 0, in_progress: 1, done: 2 } as const
-    const d = order[left.status] - order[right.status]
-    if (d !== 0) return d
-    return right.createdAt - left.createdAt
-  })
-}
+/** The status chips of the filter bar, including the "every column" option. */
+const STATUS_FILTERS: readonly StatusFilter[] = ['all', ...STATUS_ORDER]
 
 /** Status label for a board status (locale-aware). */
 function statusLabel(status: BoardCardView['status'], t: BoardPageProps['t']): string {
@@ -199,6 +202,13 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
   const [draftRejected, setDraftRejected] = useState('')
   const [archivedNotice, setArchivedNotice] = useState<{ count: number; path: string } | undefined>(undefined)
   const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false)
+  // View controls: a free-text query, which columns are visible, the selected
+  // tag, and how many done pages are open. The rules that turn these into what
+  // the page renders live in board-view.ts, where `node --test` asserts them.
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [tagFilter, setTagFilter] = useState<string | undefined>(undefined)
+  const [donePages, setDonePages] = useState(1)
   // The selected workspace: starts at the current session's workspace, and the
   // user can switch to any registered workspace.
   const [selectedWorkspace, setSelectedWorkspace] = useState<BoardWorkspace | undefined>(workspace)
@@ -252,6 +262,12 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
     // Workspace switch: the previous board's signature/notice must not leak.
     lastSignature.current = null
     setArchivedNotice(undefined)
+    // Filters are per board, not global: a query typed for one workspace's
+    // cards would silently hide everything in the next one.
+    setQuery('')
+    setStatusFilter('all')
+    setTagFilter(undefined)
+    setDonePages(1)
     void refresh()
   }, [refresh])
 
@@ -309,11 +325,29 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
     void applyMutation({ op: 'remove', id })
   }, [applyMutation])
 
-  const grouped = useMemo(() => {
-    const groups: Record<BoardCardView['status'], BoardCardView[]> = { todo: [], in_progress: [], done: [] }
-    for (const card of cards) groups[card.status].push(card)
-    return groups
-  }, [cards])
+  const filters = useMemo<BoardFilters>(
+    () => ({ query, status: statusFilter, tag: tagFilter }),
+    [query, statusFilter, tagFilter],
+  )
+  // One pass over the board per state change: order, filter, group, then window
+  // the done column. Cheap at the audited 108 cards, and memoized so a 15 s
+  // background poll that changed nothing does not rebuild it.
+  const view = useMemo(() => buildBoardView(cards, filters, donePages), [cards, filters, donePages])
+  // A changed filter gets its own done window (page 1), or the previous page
+  // count would make the new result set start scrolled past its first page.
+  useEffect(() => { setDonePages(1) }, [query, statusFilter, tagFilter])
+  const toggleTag = useCallback((tag: string): void => {
+    setTagFilter(current => current === tag ? undefined : tag)
+  }, [])
+  const clearFilters = useCallback((): void => {
+    setQuery('')
+    setStatusFilter('all')
+    setTagFilter(undefined)
+  }, [])
+  // Column count for the grid: one column when filtered to a single status.
+  const columns = statusFilter === 'all' ? STATUSES : [statusFilter]
+  // Cards matched by the visible columns — drives the "no matches" hint.
+  const visibleMatches = columns.reduce((total, status) => total + view.totals[status], 0)
 
   // No workspace selected yet — if any are registered, let the user pick one;
   // otherwise show the empty hint.
@@ -363,16 +397,44 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
           ? <p className="kb-loading">{t('loading')}</p>
           : (
             <>
-              <div className="kb-columns">
-                {STATUSES.map(status => (
+              <div className="kb-toolbar">
+                <Input
+                  className="kb-toolbar-search"
+                  value={query}
+                  placeholder={t('searchPlaceholder')}
+                  aria-label={t('searchPlaceholder')}
+                  onChange={event => setQuery(event.target.value)}
+                />
+                <div className="kb-toolbar-filters" role="group" aria-label={t('filterStatusLabel')}>
+                  {STATUS_FILTERS.map(filter => (
+                    <Pill
+                      key={filter}
+                      active={statusFilter === filter}
+                      onClick={() => setStatusFilter(filter)}
+                    >
+                      {filter === 'all' ? t('filterAll') : statusLabel(filter, t)}
+                    </Pill>
+                  ))}
+                </div>
+                {tagFilter !== undefined && (
+                  <Pill active onClick={() => toggleTag(tagFilter)} title={t('filterClearTag')}>
+                    #{tagFilter} ×
+                  </Pill>
+                )}
+                {(view.narrowed || statusFilter !== 'all') && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters}>{t('filterClear')}</Button>
+                )}
+              </div>
+              <div className={`kb-columns${statusFilter === 'all' ? '' : ' kb-columns-single'}`}>
+                {columns.map(status => (
                   <section key={status} className="kb-column" data-status={status}>
                     <div className="kb-column-head">
                       <span className={`kb-dot kb-dot-${status}`} />
                       <h3 className="kb-column-title">{statusLabel(status, t)}</h3>
-                      <span className="kb-column-count">{t('counts', { n: String(grouped[status].length) })}</span>
+                      <span className="kb-column-count">{t('counts', { n: String(view.totals[status]) })}</span>
                     </div>
                     <div className="kb-column-cards">
-                      {grouped[status].map(card => (
+                      {view.groups[status].map(card => (
                         <Card
                           key={card.id}
                           card={card}
@@ -380,13 +442,37 @@ export function BoardPage({ api, workspace, workspaces, onClose, t, openSession 
                           onMove={moveCard}
                           onRemove={removeCard}
                           onOpenSession={openSession}
+                          onTagClick={toggleTag}
+                          activeTag={tagFilter}
                         />
                       ))}
                     </div>
+                    {status === 'done' && view.totals.done > DONE_PAGE_SIZE && (
+                      <div className="kb-column-foot">
+                        <p className="kb-column-foot-note">
+                          {t('doneShowing', {
+                            shown: String(view.groups.done.length),
+                            total: String(view.totals.done),
+                          })}
+                        </p>
+                        {view.doneHidden > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDonePages(pages => pages + 1)}
+                          >
+                            {t('loadMore', { n: String(view.doneHidden) })}
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </section>
                 ))}
               </div>
               {cards.length === 0 && <p className="kb-empty">{t('empty')}</p>}
+              {cards.length > 0 && visibleMatches === 0 && (
+                <p className="kb-empty">{t('noMatches')}</p>
+              )}
               <div className="kb-composer">
                 <div className="kb-composer-row">
                   <Input
@@ -642,8 +728,12 @@ const Card = memo(function Card(props: {
   onMove: (id: string, status: BoardCardView['status']) => void
   onRemove: (id: string) => void
   onOpenSession?: (sessionId: string) => void
+  /** Clicking a tag filters the board to it (the pills used to be decorative). */
+  onTagClick: (tag: string) => void
+  /** The tag currently filtered on, so its pill shows the active state. */
+  activeTag?: string | undefined
 }) {
-  const { card, t, onMove, onRemove, onOpenSession } = props
+  const { card, t, onMove, onRemove, onOpenSession, onTagClick, activeTag } = props
   const [statusOpen, setStatusOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -704,7 +794,16 @@ const Card = memo(function Card(props: {
       <div className="kb-card-actions">
         {card.tags.length > 0 && (
           <div className="kb-card-meta">
-            {card.tags.map(tag => <Pill key={tag} active>{tag}</Pill>)}
+            {card.tags.map(tag => (
+              <Pill
+                key={tag}
+                active={activeTag === tag}
+                onClick={() => onTagClick(tag)}
+                title={t('filterByTag', { tag })}
+              >
+                {tag}
+              </Pill>
+            ))}
           </div>
         )}
         <div className="kb-card-row">

@@ -74,6 +74,34 @@ const scenarios = [
     mutate: (dir) => rmSync(join(dir, 'lib/index.js')),
   },
   {
+    name: 'done column ordered by createdAt instead of updatedAt',
+    command: 'node --test scripts/board-view.spec.mjs',
+    expect: /the most recently completed card must be first in done/,
+    mutate: (dir) => {
+      const p = join(dir, 'src/client/board-view.ts')
+      const before = readFileSync(p, 'utf8')
+      const after = before.replace(
+        'const byUpdated = right.updatedAt - left.updatedAt',
+        'const byUpdated = right.createdAt - left.createdAt',
+      )
+      // A no-op mutation would make this scenario pass for the wrong reason.
+      if (after === before) throw new Error('mutation did not apply — the updatedAt comparator is not in src/client/board-view.ts')
+      writeFileSync(p, after)
+    },
+  },
+  {
+    name: 'card description clamp removed from the stylesheet',
+    command: 'node --test scripts/board-view.spec.mjs',
+    expect: /the description must be clamped to two lines/,
+    mutate: (dir) => {
+      const p = join(dir, 'src/client/styles.ts')
+      const before = readFileSync(p, 'utf8')
+      const after = before.replace(/-webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n  overflow: hidden;\n}\n\.kb-card-fields/, '-webkit-line-clamp: unset;\n  -webkit-box-orient: vertical;\n  overflow: visible;\n}\n.kb-card-fields')
+      if (after === before) throw new Error('mutation did not apply — the .kb-card-desc clamp block is not in src/client/styles.ts')
+      writeFileSync(p, after)
+    },
+  },
+  {
     name: 'guarantee row loses its pinning assertion',
     command: 'node scripts/check-guarantees.mjs',
     expect: /no test title matches/,

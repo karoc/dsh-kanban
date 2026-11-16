@@ -11,7 +11,7 @@ When you chat with an agent (in dsh, Codex, Claude Code, …) you produce lots o
 `dsh-kanban` sinks plans and todos into a **`KANBAN.json` file at the workspace root** (git-trackable, human-editable, survives sessions) and gives you two ways to maintain it:
 
 - **Model entry**: 4 model-facing tools (`board_list` / `board_add` / `board_update` / `board_remove`) so the model records plan steps and todos while talking.
-- **Web entry**: a 「思磨力看板」 entry in the dsh Web GUI sidebar's **global panels** section that renders a **three-column board page** (To do / In progress / Done) in the centre column, with view, status move (incl. mark done), add, and delete.
+- **Web entry**: a 「思磨力看板」 entry in the dsh Web GUI sidebar's **global panels** section that renders a **three-column board page** (To do / In progress / Done) in the centre column, with search + status/tag filtering, view, status move (incl. mark done), add, and delete.
 
 The same `KANBAN.json` is shared by the model tools and the Web page, so **what the model writes, the page shows; what you check off on the page, the model reads next time.**
 
@@ -181,7 +181,22 @@ shipped, not part of the user-facing `test` chain).
   "Open source session" button (jump to the handling session);
 - **Two-line clamped previews**: each of the three what/why/rejected fields on
   a card shows at most two lines, with an ellipsis (`...`) for the rest — cards
-  stay compact and scannable;
+  stay compact and scannable; the description is clamped the same way (the
+  longest real one carried 2,528 characters, a ~755px card); the full text is in
+  the detail dialog;
+- **Ordered by last change, not by creation**: within a column the most recently
+  touched card comes first (`updatedAt`, then `createdAt`, then id). The done
+  column used to be read in creation order, which on the audited 108-card board
+  buried the cards finished most recently below row 20 (one at #99);
+- **Search, status and tag filters**: the search box matches every rendered
+  field (title, description, what/why/rejected, tags, id) and ANDs
+  whitespace-separated terms; status pills narrow the board to one full-width
+  column; a card's tag pills filter the board to that tag (they were decorative
+  before). Filtering lifts the done column's page window, so a search hit is
+  never left behind the "load more" button;
+- **Done-column paging**: the done column renders the 20 most recently completed
+  cards plus one "Load more" step at a time (the column badge still counts every
+  match), so a 108-card board paints fast and the recent end stays on top;
 - **Detail dialog**: clicking the card's title + what/why/rejected region
   (including the description) opens a detail Modal where the full content is
   laid out in labeled sections (icon + label + newline-preserving body), plus
@@ -286,6 +301,7 @@ src/board-core.ts       # KANBAN.json domain: read/write, validation, card CRUD,
 src/index.ts            # host half: 4 model tools + /kanban/api webServer route
 src/client/index.ts     # client apply: global panel (sidebar glyph + 'main' occupant)
 src/client/BoardPage.tsx       # three-column board component (+ missing-field hints)
+src/client/board-view.ts       # pure ordering / search / filter / done-window rules (unit-tested)
 src/client/KanbanSurface.tsx   # panel glyph + the 'main' panel wrapper
 src/client/workspace-pick.ts   # current-session + most-recently-active workspace derivations (pure, unit-tested)
 src/client/board-counts.ts     # /kanban/counts poll behind the glyph badge
@@ -329,10 +345,11 @@ pnpm bundle    # emits lib/index.js + lib/client.js
 ## Verification
 
 ```sh
-pnpm test       # tsc --noEmit typecheck + 43 unit tests (board domain, workspace pick, note naming)
-                #   + 13 workspace-pick/current-session derivation tests
-                #   + token-drift gate (with negative control) + panel-wiring gate
-                #   + host tool smoke + skill runtime registration vs a real registry
+pnpm test       # tsc --noEmit typecheck + 56 unit tests (board domain 26, workspace pick 13,
+                #   note naming 4, board view 13) + token-drift gate (with negative control)
+                #   + panel-wiring gate + host tool smoke
+                #   + skill runtime registration vs a real registry
+                #   + 25 negative guarantee rows + 7 negative controls + the release gate
 pnpm typecheck  # typecheck only (tsc --noEmit)
 pnpm verify     # 4 board tools registered + board_add persisted end-to-end
 pnpm accept     # GUI acceptance against a running dsh web (http://127.0.0.1:3080):

@@ -29,3 +29,7 @@ when a title disappears, so a guarantee cannot be quietly dropped.
 | G19 | 模型可见的卡片行**必须携带精确 id**（否则 board_update 不可调用） | `renderCardLine carries the exact card id and missing-field flags` |
 | G20 | 非 ASCII 主题的笔记文件名**不会互相碰撞** | `two non-ASCII topics that differ only in punctuation never collide` |
 | G21 | 纯标点主题也能得到基于哈希的唯一文件名 | `an all-punctuation topic still gets a hash-based name` |
+| G22 | 已完成列**按 `updatedAt` 降序**：最近完成的卡永远在顶部（不受 `createdAt` 影响） | `done column is ordered by updatedAt: the most recently completed card is first` |
+| G23 | 搜索/标签过滤命中的卡**绝不会被已完成列的分页窗口藏起来**（过滤时取消 20 张窗口） | `a narrowing filter lifts the done window so a search hit is never hidden` |
+| G24 | 任何一张卡在 108 卡看板上**最多 1 次搜索操作**即可到达（0 次操作 = 首屏） | `every card is reachable in at most two operations` |
+| G25 | 卡片描述在页面上**最多两行**（省略号），全文只在详情弹窗展开 | `the card description is clamped to two lines by its CSS rule` |
