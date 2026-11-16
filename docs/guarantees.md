@@ -33,3 +33,6 @@ when a title disappears, so a guarantee cannot be quietly dropped.
 | G23 | 搜索/标签过滤命中的卡**绝不会被已完成列的分页窗口藏起来**（过滤时取消 20 张窗口） | `a narrowing filter lifts the done window so a search hit is never hidden` |
 | G24 | 任何一张卡在 108 卡看板上**最多 1 次搜索操作**即可到达（0 次操作 = 首屏） | `every card is reachable in at most two operations` |
 | G25 | 卡片描述在页面上**最多两行**（省略号），全文只在详情弹窗展开 | `the card description is clamped to two lines by its CSS rule` |
+| G26 | `/kanban/*` 路由在 **DSH 0.2.x**（`Connection.requestRejection` 已移除）上照常工作，不再 400 空响应 | `kanban routes answer on a DSH 0.2.x host that removed Connection.requestRejection` |
+| G27 | 既无 Peer 也无 Connection 围栏时路由**fail closed**（401，绝不读板） | `an unauthenticated request with no Peer and no fence fails closed` |
+| G28 | DSH 0.1.x 的 Connection 围栏**保留**（不可信请求仍 403） | `a DSH 0.1.x host keeps the Connection trust fence (403 for an untrusted request)` |

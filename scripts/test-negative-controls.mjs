@@ -14,7 +14,7 @@
  * release gate's registry probe cannot turn the positive control red.
  */
 import { execFileSync, execSync } from 'node:child_process'
-import { appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -102,6 +102,26 @@ const scenarios = [
     },
   },
   {
+    name: 'trust fence loses its host-generation guard (DSH 0.2.x route regression)',
+    command: 'node --test scripts/routes.spec.mjs',
+    expect: /connection\.requestRejection is not a function/,
+    // The scenario runs a spec against the built bundle, and the spec
+    // resolves @deepseek-ai/* — which `git clone` does not carry. The symlink
+    // is per-scenario on purpose: a `node_modules` symlink in the POSITIVE
+    // control's clone is not ignored by git's `node_modules/` rule (that
+    // pattern matches directories, and a symlink is not one), so release-check
+    // would see a dirty tree and the positive control would fail for the wrong
+    // reason.
+    usesModules: true,
+    mutate: (dir) => {
+      const p = join(dir, 'lib/index.js')
+      const before = readFileSync(p, 'utf8')
+      const after = before.replace('typeof connection.requestRejection === "function"', 'true')
+      if (after === before) throw new Error('mutation did not apply — the requestRejection guard is not in lib/index.js')
+      writeFileSync(p, after)
+    },
+  },
+  {
     name: 'guarantee row loses its pinning assertion',
     command: 'node scripts/check-guarantees.mjs',
     expect: /no test title matches/,
@@ -144,6 +164,9 @@ for (const scenario of scenarios) {
   let result
   try {
     scenario.mutate(dir)
+    if (scenario.usesModules === true) {
+      try { symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'), 'dir') } catch { /* already there or unsupported */ }
+    }
     result = run(dir, scenario.command)
   } catch (error) {
     result = { code: 0, output: `mutation threw: ${error.message}` }
